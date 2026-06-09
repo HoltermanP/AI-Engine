@@ -13,6 +13,10 @@ import { dominantLegtechniek, maaiveldNapDefault, parseNetType } from './parse';
 
 export type { CalcResult, CalcInput, CalcCategorie } from './types';
 
+export * from './kabeltrek';
+export * from './thermisch';
+export * from './zetting';
+
 export function buildCalcInput(trace: DemoTrace): CalcInput {
   const parsed = parseNetType(trace.netType, trace.discipline);
   const zValues = trace.coordinates.map((c) => c[2]).filter((z): z is number => z != null);

@@ -7,6 +7,7 @@ import type {
 } from './types';
 import type { DemoTrace } from '@/demo/traces';
 import { buildBoreSegmentInput, sleuflozeSegmenten } from '@/demo/bore-data';
+import { normVermelding } from '@/lib/normen';
 import { BORE_METHODE_LABELS } from './types';
 import {
   boormediumVolumeM3,
@@ -17,6 +18,24 @@ import {
   persingDuwkrachtKN,
   sleufloosKrachtKN,
 } from './formulas';
+import { berekenMudspanning } from './mud';
+import { berekenSterkte } from './sterkte';
+import { berekenZetting } from './zetting';
+
+/** Boorgatdiameter incl. overcut (mm) — consistent met boormediumberekening. */
+function boorgatDiameterMm(input: BoreSegmentInput): number {
+  return input.buisDiameterMm + 75;
+}
+
+/** Diepte boorhart onder maaiveld (m) op het diepste punt. */
+function maxDiepteOnderMvM(input: BoreSegmentInput): number {
+  return Math.max(0, input.maaiveldNap - input.trajectory.maxDiepteNap);
+}
+
+/** Grondwaterstand onder maaiveld (m). */
+function grondwaterDiepteM(input: BoreSegmentInput): number {
+  return Math.max(0, input.maaiveldNap - input.grondwaterNap);
+}
 
 function calcTrajectory(input: BoreSegmentInput): BoreCalcResult {
   const minR = minBoogstraalM(input.buisDiameterMm, input.methode);
@@ -136,6 +155,124 @@ function calcBoormedium(input: BoreSegmentInput): BoreCalcResult | null {
   };
 }
 
+/** Mudspanning + blow-out check (Delftse methode, alleen HDD). */
+function calcMudspanning(input: BoreSegmentInput): BoreCalcResult | null {
+  if (input.methode !== 'hdd') return null;
+  const res = berekenMudspanning({
+    lengteM: input.lengteM,
+    maxDiepteOnderMvM: maxDiepteOnderMvM(input),
+    entryAngleDeg: input.trajectory.entryAngleDeg,
+    exitAngleDeg: input.trajectory.exitAngleDeg,
+    grondwaterDiepteM: grondwaterDiepteM(input),
+    dominantGrondsoort: input.dominantGrondsoort,
+    boorgatDiameterMm: boorgatDiameterMm(input),
+  });
+  const krit = res.kritischPunt;
+
+  return {
+    type: 'mudspanning',
+    segmentVolgorde: input.volgorde,
+    methode: input.methode,
+    normReferentie: `${normVermelding('nen3650')} (Delftse methode) / ${normVermelding('nen3651')}`,
+    invoer: {
+      lengteM: input.lengteM,
+      maxDiepteOnderMvM: Math.round(maxDiepteOnderMvM(input) * 100) / 100,
+      boorgatDiameterMm: boorgatDiameterMm(input),
+      grondwaterDiepteM: Math.round(grondwaterDiepteM(input) * 100) / 100,
+      dominantGrondsoort: input.dominantGrondsoort,
+    },
+    resultaat: {
+      voldoet: res.voldoet,
+      minimaleMarge: Number.isFinite(res.minimaleMarge) ? res.minimaleMarge : -1,
+      kritischeAfstandM: krit?.afstandM ?? -1,
+      kritischeDiepteM: krit?.diepteM ?? -1,
+      pMinKritiekKpa: krit?.pMinKpa ?? -1,
+      pMaxKritiekKpa: krit?.pMaxKpa ?? -1,
+      aantalPunten: res.punten.length,
+    },
+    aannames: res.aannames,
+    conclusie: res.conclusie,
+  };
+}
+
+/** Sterktecontrole productbuis (HDPE) — HDD en persing. */
+function calcSterkteBuis(input: BoreSegmentInput): BoreCalcResult | null {
+  if (input.methode !== 'hdd' && input.methode !== 'persing') return null;
+  const kracht =
+    input.methode === 'hdd' ? hddTrekkrachtKN(input) : persingDuwkrachtKN(input);
+  const res = berekenSterkte({
+    buisDiameterMm: input.buisDiameterMm,
+    trekkrachtKN: kracht,
+    boogstraalM: input.trajectory.boogstraalM,
+    diepteM: maxDiepteOnderMvM(input),
+    grondwaterDiepteM: grondwaterDiepteM(input),
+  });
+
+  return {
+    type: 'sterkte_buis',
+    segmentVolgorde: input.volgorde,
+    methode: input.methode,
+    normReferentie: `${normVermelding('nen3650')} / ${normVermelding('astmF1962')}`,
+    invoer: {
+      buisDiameterMm: input.buisDiameterMm,
+      sdr: 11,
+      krachtKN: kracht,
+      boogstraalM: input.trajectory.boogstraalM,
+      diepteM: Math.round(maxDiepteOnderMvM(input) * 100) / 100,
+    },
+    resultaat: {
+      voldoet: res.voldoet,
+      pCrKpa: res.pCrKpa,
+      pExtKpa: res.pExtKpa,
+      bucklingSF: res.bucklingSF,
+      bucklingVoldoet: res.bucklingVoldoet,
+      sigmaTrekMpa: res.sigmaTrekMpa,
+      sigmaBuigMpa: res.sigmaBuigMpa,
+      unityCheck: res.unityCheck,
+      unityVoldoet: res.unityVoldoet,
+    },
+    aannames: [
+      ...res.aannames,
+      ...(input.methode === 'persing'
+        ? ['Persing: duwkracht als axiale kracht getoetst (drukspanning, zelfde unity-benadering)']
+        : []),
+    ],
+    conclusie: res.conclusie,
+  };
+}
+
+/** Zettingsindicatie boven de boring (alleen HDD). */
+function calcZetting(input: BoreSegmentInput): BoreCalcResult | null {
+  if (input.methode !== 'hdd') return null;
+  const res = berekenZetting({
+    boorgatDiameterMm: boorgatDiameterMm(input),
+    diepteAsM: maxDiepteOnderMvM(input),
+    dominantGrondsoort: input.dominantGrondsoort,
+  });
+
+  return {
+    type: 'zetting',
+    segmentVolgorde: input.volgorde,
+    methode: input.methode,
+    normReferentie: `${normVermelding('nen3650')} / ${normVermelding('nen3651')}`,
+    invoer: {
+      boorgatDiameterMm: boorgatDiameterMm(input),
+      diepteAsM: Math.round(maxDiepteOnderMvM(input) * 100) / 100,
+      dominantGrondsoort: input.dominantGrondsoort,
+    },
+    resultaat: {
+      voldoet: res.voldoet,
+      sMaxMm: res.sMaxMm,
+      iM: res.iM,
+      trogBreedteM: res.trogBreedteM,
+      beoordeling: res.beoordeling,
+      volumeVerliesPct: Math.round(res.volumeVerliesFractie * 1000) / 10,
+    },
+    aannames: res.aannames,
+    conclusie: res.conclusie,
+  };
+}
+
 function calcPutten(input: BoreSegmentInput): BoreCalcResult {
   const t = input.trajectory;
   return {
@@ -205,6 +342,12 @@ function runSegmentEngineering(input: BoreSegmentInput): BoreSegmentResult {
   ];
   const medium = calcBoormedium(input);
   if (medium) berekeningen.push(medium);
+  const mud = calcMudspanning(input);
+  if (mud) berekeningen.push(mud);
+  const sterkte = calcSterkteBuis(input);
+  if (sterkte) berekeningen.push(sterkte);
+  const zetting = calcZetting(input);
+  if (zetting) berekeningen.push(zetting);
 
   return {
     volgorde: input.volgorde,

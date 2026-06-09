@@ -7,6 +7,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx lib/db/seed.ts",
@@ -53,6 +55,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@tarikjabiri/dxf": "^2.8.9",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -63,6 +66,7 @@
     "eslint-config-next": "15.5.19",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }

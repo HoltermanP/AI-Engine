@@ -30,12 +30,20 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — .env.example blijft commitbaar als sjabloon
+.env
+.env.local
+.env.*.local
 
 # vercel
 .vercel
 
+# BRO SAD extract (groot bestand, lokaal genereren via npm run data:extract-sad)
+/lib/data/bro-sad-vervuilde-grond.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code — lokale instellingen per gebruiker
+.claude/settings.local.json

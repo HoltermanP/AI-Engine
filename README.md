@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# InfraEngine
 
-## Getting Started
+Ontwerp- en procesondersteuningstool voor ondergrondse infrastructuur (kabels & leidingen).
 
-First, run the development server:
+## Fase 3 & 4 — Engineering, tekeningen & omgevingsproces
+
+- **Berekeningen** per discipline (NEN 7171, 3650/3651, 1010, Hazen-Williams, etc.)
+- **SVG-tekeningen**: tracé, lengteprofiel, dwarsprofiel, kruisingsdetail, station
+- **Onderzoeken**: archeologie, bodem, NGE/CE, ecologie, K&L-inventarisatie
+- **Aanvragen & vergunningchecklist** met conceptdocumenten
+- **AI-assistentie** (OpenAI live of lokaal sjabloon)
+- **React Flow** procesoverzicht per tracé
+- **Dossier** met downloadbare documenten
+
+## Fase 2 — GIS & toetsing
+
+- **Gegevens verzamelen**: knop op trace-pagina roept alle connectors aan (QStash async indien geconfigureerd)
+- **Toets tracé**: conflictdetectie (afstand, dekking, kruisingen) op kaart + lijst
+- **Live PDOK/BRO**: zet `PDOK_FORCE_DEMO=false` en/of `BRO_FORCE_DEMO=false` in `.env.local`
+
+## Fase 1 — Skelet & connector-kern
+
+De app draait **volledig zonder credentials**. Alle databronnen leveren realistische voorbeelddata; live bronnen worden gemarkeerd met een `LIVE`-badge.
+
+### Starten
 
 ```bash
+npm install
+cp .env.example .env.local   # vul DATABASE_URL in
+npm run db:migrate           # schema + demo-seed naar Neon/PostGIS
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) → dashboard met voorbeeldproject in Noordoostpolder.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Optionele configuratie
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Kopieer `.env.example` naar `.env.local` en vul naar wens aan:
 
-## Learn More
+| Variabele | Doel |
+|---|---|
+| `DATABASE_URL` | Neon PostgreSQL + PostGIS |
+| `CLERK_*` | Authenticatie |
+| `OPENAI_API_KEY` | AI-assistentie (live) |
+| `PDOK_FORCE_DEMO=false` | PDOK live (fase 2) |
+| `BRO_FORCE_DEMO=false` | BRO live (fase 2) |
 
-To learn more about Next.js, take a look at the following resources:
+### Architectuur
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `/lib/connectors` — connector-abstractie met registry
+- `/demo` — reproduceerbare voorbeelddatasets (seed 42)
+- `/lib/db` — Drizzle schema + PostGIS migraties
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Voorbeeldproject
 
-## Deploy on Vercel
+**Netverzwaring Noordoostpolder Oost** — 6 tracés (1 per discipline) met KLIC-netten, sonderingen en percelen.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Roadmap
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Fase 2**: GIS data verzamelen + toetsing (PDOK/BRO live, conflictdetectie)
+- **Fase 3**: Engineering berekeningen + SVG-tekeningen
+- **Fase 4**: Omgevingsproces, AI, React Flow dossier

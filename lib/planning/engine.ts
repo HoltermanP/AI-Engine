@@ -8,6 +8,7 @@ import {
   afgerondeStappenVoorFase,
 } from './derive';
 import { addDays, diffDays, maxDatum, minDatum, weekToStartDate } from './dates';
+import { markeerKritiekPad } from './kritiek-pad';
 import type { PlanningActiviteit, PlanningActiviteitTemplate, ProjectPlanning } from './types';
 
 function statusVoorFase(
@@ -168,7 +169,9 @@ export function generateProjectPlanning(
 
   activiteiten.sort((a, b) => a.startDatum.localeCompare(b.startDatum) || a.titel.localeCompare(b.titel));
 
-  markKritiekPad(activiteiten);
+  const gemarkeerd = markeerKritiekPad(activiteiten);
+  activiteiten.length = 0;
+  activiteiten.push(...gemarkeerd);
 
   const startDatum = minDatum(...activiteiten.map((a) => a.startDatum));
   const eindDatum = maxDatum(...activiteiten.map((a) => a.eindDatum));
@@ -186,23 +189,6 @@ export function generateProjectPlanning(
     milestones,
     samenvatting: bouwSamenvatting(project, traces, activiteiten, startDatum, eindDatum),
   };
-}
-
-function markKritiekPad(activiteiten: PlanningActiviteit[]) {
-  const byId = new Map(activiteiten.map((a) => [a.id, a]));
-  let latest = activiteiten[0];
-  for (const a of activiteiten) {
-    if (a.eindDatum > (latest?.eindDatum ?? '')) latest = a;
-  }
-  if (!latest) return;
-  let current: PlanningActiviteit | undefined = latest;
-  const visited = new Set<string>();
-  while (current && !visited.has(current.id)) {
-    current.kritiekPad = true;
-    visited.add(current.id);
-    const preds = current.voorgangers.map((id) => byId.get(id)).filter(Boolean) as PlanningActiviteit[];
-    current = preds.sort((a, b) => b.eindDatum.localeCompare(a.eindDatum))[0];
-  }
 }
 
 function bouwSamenvatting(

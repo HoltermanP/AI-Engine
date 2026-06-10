@@ -19,8 +19,33 @@
 12. **Materiaallijst**: snijverlies 5% + 5 m per uiteinde; haspels MS 1000 m / LS 500 m; mantelbuis ≥ 1,5× productdiameter; zandbed 0,2 m³/m.
 13. **Deliverable-status**: afgeleid uit tracé-fase (eerdere fasen definitief, huidige concept) totdat echte statusregistratie in de database bestaat.
 
-## BLOCKERS
-(nog geen)
+- +2:00 — UI-integratie: fase-stepper + deliverables-overzicht op projectpagina, afwegingsmatrix in auto-trace-panel, WVB-documentenpanel (uitgangspunten/proefsleuven/V&G/kabeltrekplan → PDF/Word) in de dossier-fase, export-API (DXF + materiaallijst-Excel). Vergunningenplanning (Omgevingswet-termijnen) en gefaseerde HDD-trekkracht (ASTM F1962) toegevoegd. Twee pre-existing lint-blockers gefixt.
+- Eindsprint — Build groen (exit 0), 117 vitest-tests groen, alle 6 validatiescripts groen. Slotcommit gezet.
 
-## Open / vervolgstappen
-(wordt aan het eind ingevuld)
+## EINDSTAND
+
+### Wat is klaar
+1. **Procesmodel**: 6 projectfasen (Verkenning → VO → DO → UO → WVB → Uitvoering/As-built) met deliverables-registry, statuslogica en fase-stepper + deliverables-dashboard op de projectpagina.
+2. **Tracé-ontwerp**: afwegingsmatrix (7 gewogen criteria, advies met motivatie) in de UI bij ≥2 route-alternatieven; deterministische uitgangspuntennotitie met normen per discipline en parallelafstandentabel (NEN 7171-1).
+3. **Boorengineering**: mudspanning/blow-out per punt (Luger & Hergarden cavity-expansie, NEN 3650-1), sterktecontrole buis (buckling + unity check), zettingstrog boven boring, gefaseerde intrekkracht (ASTM F1962 met opdrijving in mud) — alle in de bore-engine geïntegreerd met normvermelding.
+4. **Berekeningen**: kabeltrek (capstan + SWP, beide richtingen, richtingsadvies + tussentrekput-locatie), thermisch IEC 60287 (gevalideerd referentiegeval 441 A), sleufzetting (CR-methode veen/klei).
+5. **Tekeningen**: DXF-export (tracé + lengteprofiel) met NLCS 5.0-laagnamen en IMKL-kleuren; NLCS-titelblok op alle SVG-tekeningen met doc-code; DWG-conversie-koppelvlak (env `DWG_CONVERTER_URL`).
+6. **Calculatie**: materiaallijst (haspels, snijverlies, moffen, mantelbuizen, bedding, afdekking) met Excel-export; calculatieniveaus per fase (±30/±15/±5%).
+7. **Planning**: echt kritiek pad (CPM backward-pass) i.p.v. naïeve keten; vergunningafleiding met wettelijke Omgevingswet-termijnen en kritieke vergunningendoorlooptijd.
+8. **Uitvoeringsdocumenten**: kabeltrekplan (trekvakken, haspel/lier-opstelplaatsen, rollenplan, communicatieplan), proefsleuvenplan (CROW 500: kruisingen + parallelligging + boorpunten, samenvoeging < 25 m), V&G-plan ontwerpfase (risico's uit quick scans) — allemaal genereerbaar vanuit het documenten-panel met PDF/Word-download.
+9. **Fundament**: centrale normenconfig (lib/normen.ts), documentcodering [PROJECT]-[FASE]-[TYPE]-[VOLGNR]-[VERSIE], vitest-suite (117 tests), export-API.
+
+### BLOCKERS
+1. **UI-agent sessielimiet**: de tweede UI-agent viel halverwege uit; ontbrekende onderdelen (export-route, documenten-panel, panel-integratie) zijn handmatig afgemaakt. Geen openstaand gevolg.
+2. **Build-lint**: `next build` bleek pre-existing lint-errors te bevatten die door cache-invalidatie zichtbaar werden (lib/db/store.ts `useDatabase`-naamgeving, prefer-const in gpkg-geometry). Gefixt (hernoemd naar `databaseActief`).
+3. **Geen DB-migraties uitgevoerd** (bewust): deliverable-statussen worden afgeleid uit tracé-fasen i.p.v. geregistreerd. Zie vervolgstappen.
+
+### Aanbevolen vervolgstappen
+1. **Statusregistratie deliverables** in de database (tabel `deliverable_status`) + handmatige status-overrides in de UI; de afleiding in lib/process/deliverable-status.ts is daarvoor voorbereid.
+2. **Berekeningen koppelen aan fase + versionering** via het bestaande `berekening`-patroon (invoer/resultaat/normReferentie zit al in de modules; alleen opslag + UI-historie ontbreekt).
+3. **Vergunningenplanning in de Gantt**: deriveVergunningen → planningactiviteiten met termijnen als duur (engine + tests staan klaar in lib/planning/vergunningen.ts).
+4. **Kabeltrekplan-trekvakken uit werkelijke geometrie**: bochten worden nu vereenvoudigd afgeleid (90°/R6 tussen wegsegmenten); beter: hoeken uit de tracé-polyline berekenen.
+5. **Lengteprofiel-DXF aansluiten op maaiveld-data** (AHN) en dwarsprofielen in DXF.
+6. **Thermische berekening in de UI** ontsluiten (module + tests bestaan; nog geen paneel).
+7. **GEF-upload** voor sonderingen (parser ontbreekt; BRO-demo-CPT's werken al in het boorprofiel).
+8. **Echte multi-tenant row-scoping** zodra Clerk-organisaties actief worden gebruikt.

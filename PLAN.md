@@ -8,17 +8,17 @@
 
 ## P1 — Kernproces
 - [x] **Fasemodel uitbreiden**: 6 projectfasen (verkenning, VO, DO, UO, werkvoorbereiding, uitvoering/as-built) met deliverables-registry per fase + status (concept/in_review/definitief) — `lib/process/fasen.ts`
-- [ ] Fase-stepper UI op projectniveau met deliverable-status per fase
+- [x] Fase-stepper UI op projectniveau met deliverable-status per fase
 - [x] **Afwegingsmatrix (MCA)**: lengte, #boringen, #kruisingen, bodemrisico, vergunningen, kosten-indicatie, omgevingshinder → scores + gewogen advies — `lib/services/afwegingsmatrix.ts` + tests + UI in auto-trace-panel
 - [x] **Uitgangspuntennotitie**: deterministisch gegenereerd uit tracé-parameters (normen, dekking, parallelafstanden, kruisingsmethoden) — `lib/dossier/uitgangspunten.ts` + UI/download
 
 ## P2 — Berekeningen (hart van de upgrade)
 - [x] **HDD-uitbreiding** (`lib/bore/`): mudspanning/blow-out (Delftse vergelijking: min. mudbruk vs. max. grenswaarde per punt), sterktecontrole buis (ringstijfheid/buckling + axiale spanning + combinatie), zettingsindicatie — met unit tests tegen handberekening
-- [ ] **Trekkracht HDD verbeteren**: faseweise berekening (intrekken in boorgat met opdrijving/mud) cf. NEN 3650-benadering
+- [x] **Trekkracht HDD verbeteren**: faseweise berekening (intrekken in boorgat met opdrijving/mud) cf. NEN 3650-benadering
 - [x] **Kabeltrekberekening** (`lib/calc/kabeltrek.ts`): trekkracht per sectie + zijwaartse druk (SWP) in bochten, toelaatbare waarden per kabeltype, advies trekrichting — met tests
 - [x] **Thermische berekening IEC 60287** (`lib/calc/thermisch.ts`): ampacity uit bodemwarmteweerstand, legpatroon, bundeling — met tests tegen referentiewaarde
 - [x] **Zettingsberekening** (indicatief, Koppejan-achtig voor veen/klei) — `lib/calc/zetting.ts` + tests
-- [ ] Berekeningen gekoppeld aan fase + opslag via bestaand `berekening`-patroon
+- [ ] Berekeningen gekoppeld aan fase + opslag via bestaand `berekening`-patroon — NIET AF, zie vervolgstappen in UPGRADE_LOG.md
 
 ## P2 — Calculatie & materiaallijst
 - [x] **Materiaallijst (BOM)** (`lib/calculatie/materiaal.ts`): kabel/buis per haspel incl. snijverlies, moffen, mantelbuizen, zand, lint, afdekplaten — Excel-export
@@ -31,7 +31,7 @@
 
 ## P3 — Planning
 - [x] Kritiek pad (CPM) in planning-engine + markering in Gantt
-- [ ] Vergunningenplanning met wettelijke termijnen (Omgevingswet: reguliere 8 wkn / uitgebreide 26 wkn)
+- [x] Vergunningenplanning met wettelijke termijnen (engine + tests; Gantt-koppeling als vervolgstap) (Omgevingswet: reguliere 8 wkn / uitgebreide 26 wkn)
 
 ## P3 — Uitvoeringsdocumenten
 - [x] **Kabeltrekplan** per trekvak: treklengte, richting, haspel/lier-opstelplaats, berekend vs. toelaatbaar, rollenplan — gegenereerd document (PDF-tauglijke markdown/dossier-patroon)
@@ -41,10 +41,10 @@
 ## P3 — Rapportage & polish
 - [x] Documentcodes door alle gegenereerde documenten heen
 - [x] Normversie-vermelding in alle norm-gebaseerde output (uit `lib/normen.ts`)
-- [ ] UI-polish: deliverable-dashboard per project, statuskleuren consistent
+- [x] UI-polish: deliverable-dashboard per project, statuskleuren consistent
 - [x] README + .env.example actueel
 
 ## Eindsprint (laatste 30 min)
-- [ ] Build groen + alle tests groen
-- [ ] UPGRADE_LOG.md compleet (klaar / blockers / vervolgstappen)
-- [ ] `chore: nachtrun afgerond` commit
+- [x] Build groen + alle tests groen (117 vitest + 6 validatiescripts)
+- [x] UPGRADE_LOG.md compleet (klaar / blockers / vervolgstappen)
+- [x] `chore: nachtrun afgerond` commit

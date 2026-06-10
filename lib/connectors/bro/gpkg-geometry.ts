@@ -39,7 +39,7 @@ function parseWkbPolygons(buf: Buffer, start: number): [number, number][][] {
   const readU32 = (o: number) => (le ? buf.readUInt32LE(o) : buf.readUInt32BE(o));
   const readF64 = (o: number) => (le ? buf.readDoubleLE(o) : buf.readDoubleBE(o));
 
-  let type = readU32(offset);
+  const type = readU32(offset);
   offset += 4;
   if (type & 0x20000000) offset += 4;
 
@@ -51,7 +51,7 @@ function parseWkbPolygons(buf: Buffer, start: number): [number, number][][] {
     const rings: [number, number][][] = [];
     for (let p = 0; p < numPoly; p++) {
       offset += 1;
-      let innerType = readU32(offset);
+      const innerType = readU32(offset);
       offset += 4;
       if (innerType & 0x20000000) offset += 4;
       const parsed = readPolygonRing(offset, le, readU32, readF64);

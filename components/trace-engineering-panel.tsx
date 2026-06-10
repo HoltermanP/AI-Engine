@@ -19,6 +19,7 @@ import type { DemoTrace } from '@/demo/traces';
 import { CalcResultsGrouped } from '@/components/calc-results-grouped';
 import { BoreEngineeringPanel } from '@/components/bore-engineering-panel';
 import { CalculatiePanel } from '@/components/calculatie-panel';
+import { WvbDocumentenPanel } from '@/components/wvb-documenten-panel';
 import {
   runBerekeningenAction,
   generateTekeningenAction,
@@ -444,6 +445,8 @@ export function TraceEngineeringPanel({
             </div>
           </CardContent>
         </Card>
+
+        <WvbDocumentenPanel traceId={traceId} traceCode={traceCode} />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button

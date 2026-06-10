@@ -5,9 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { ProjectActionsPanel } from '@/components/project-actions-panel';
 import { ProjectProcessNav, ProjectProcessHint } from '@/components/project-process-nav';
 import { ProjectStatusOverview } from '@/components/project-status-overview';
+import { ProjectFaseOverzicht } from '@/components/project-fase-overzicht';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProgressBar } from '@/components/progress-bar';
 import { getProject, getTraces, getBestaandNet } from '@/lib/db/store';
+import { deriveDeliverableStatuses } from '@/lib/process/deliverable-status';
 import { getProjectSummary, FASE_LABELS } from '@/lib/services/project-stats';
 import { DISCIPLINE_LABELS } from '@/lib/db/types';
 import { traceLengthM } from '@/lib/geo';
@@ -38,6 +40,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const bestaandNet = await getBestaandNet();
   const summary = await getProjectSummary(project);
   const firstTraceId = traces[0]?.id ?? null;
+  const deliverableRecords = deriveDeliverableStatuses(traces);
 
   const stepStatuses: Partial<Record<ProjectProcessStepId, StepperStatus>> = {
     overzicht: 'bezig',
@@ -56,6 +59,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             stepStatuses={stepStatuses}
           />
           <ProjectProcessHint projectId={id} />
+        </div>
+
+        <div className="shrink-0 border-b border-border/60 px-4 py-3">
+          <ProjectFaseOverzicht records={deliverableRecords} />
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">

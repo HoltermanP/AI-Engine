@@ -47,7 +47,7 @@ interface TraceMetadata {
   traceToets?: PersistedTraceToets;
 }
 
-function useDatabase() {
+function databaseActief() {
   return isDatabaseConfigured() && getDb() !== null;
 }
 
@@ -142,7 +142,7 @@ async function getOrganisatieLegacyId(): Promise<string> {
 }
 
 export async function getOrganisatie() {
-  if (!useDatabase()) return demoStore.getDemoOrganisatie();
+  if (!databaseActief()) return demoStore.getDemoOrganisatie();
   const db = getDb()!;
   const [org] = await db.select().from(organisatie).limit(1);
   if (!org) return demoStore.getDemoOrganisatie();
@@ -154,7 +154,7 @@ export async function getOrganisatie() {
 }
 
 export async function getProjecten(): Promise<DemoProject[]> {
-  if (!useDatabase()) return demoStore.getDemoProjecten();
+  if (!databaseActief()) return demoStore.getDemoProjecten();
   const db = getDb()!;
   const orgLegacyId = await getOrganisatieLegacyId();
   const rows = await db.select().from(project).orderBy(project.createdAt);
@@ -162,7 +162,7 @@ export async function getProjecten(): Promise<DemoProject[]> {
 }
 
 export async function getProject(id: string): Promise<DemoProject | null> {
-  if (!useDatabase()) return demoStore.getDemoProject(id);
+  if (!databaseActief()) return demoStore.getDemoProject(id);
   const db = getDb()!;
   const orgLegacyId = await getOrganisatieLegacyId();
   const [row] = await db
@@ -174,7 +174,7 @@ export async function getProject(id: string): Promise<DemoProject | null> {
 }
 
 export async function getTraces(projectId?: string): Promise<DemoTrace[]> {
-  if (!useDatabase()) return demoStore.getDemoTraces(projectId);
+  if (!databaseActief()) return demoStore.getDemoTraces(projectId);
   const db = getDb()!;
 
   let projectUuid: string | undefined;
@@ -220,7 +220,7 @@ export async function getTraces(projectId?: string): Promise<DemoTrace[]> {
 }
 
 export async function getTrace(id: string): Promise<DemoTrace | null> {
-  if (!useDatabase()) return demoStore.getDemoTrace(id);
+  if (!databaseActief()) return demoStore.getDemoTrace(id);
   const db = getDb()!;
 
   const result = await db.execute<Record<string, unknown>>(sql`
@@ -258,13 +258,13 @@ export async function getTrace(id: string): Promise<DemoTrace | null> {
 export async function getTraceByDiscipline(
   discipline: Discipline
 ): Promise<DemoTrace | null> {
-  if (!useDatabase()) return demoStore.getDemoTraceByDiscipline(discipline);
+  if (!databaseActief()) return demoStore.getDemoTraceByDiscipline(discipline);
   const traces = await getTraces();
   return traces.find((t) => t.discipline === discipline) ?? null;
 }
 
 export async function getBestaandNet(): Promise<DemoBestaandNet[]> {
-  if (!useDatabase()) return demoStore.getDemoBestaandNet();
+  if (!databaseActief()) return demoStore.getDemoBestaandNet();
   const db = getDb()!;
 
   const result = await db.execute<Record<string, unknown>>(sql`
@@ -295,7 +295,7 @@ export async function getBestaandNet(): Promise<DemoBestaandNet[]> {
 export async function getCollectedTraceData(
   traceLegacyId: string
 ): Promise<CollectedTraceData | null> {
-  if (!useDatabase()) {
+  if (!databaseActief()) {
     const data = demoStore.getDemoTraceSession(traceLegacyId)?.collectedData ?? null;
     return isCollectedDataCurrent(data) ? data : null;
   }
@@ -316,7 +316,7 @@ export async function getCollectedTraceData(
 export async function getPersistedTraceToets(
   traceLegacyId: string
 ): Promise<PersistedTraceToets | null> {
-  if (!useDatabase()) {
+  if (!databaseActief()) {
     return demoStore.getDemoTraceSession(traceLegacyId)?.traceToets ?? null;
   }
   const db = getDb()!;
@@ -335,7 +335,7 @@ export async function persistTraceToets(
   traceLegacyId: string,
   toets: PersistedTraceToets
 ): Promise<void> {
-  if (!useDatabase()) {
+  if (!databaseActief()) {
     demoStore.saveDemoTraceSession(traceLegacyId, { traceToets: toets });
     return;
   }
@@ -362,7 +362,7 @@ export async function persistTraceToets(
 export async function getTraceInternalId(
   traceLegacyId: string
 ): Promise<string | null> {
-  if (!useDatabase()) return null;
+  if (!databaseActief()) return null;
   const db = getDb()!;
   const [row] = await db
     .select({ id: trace.id })
@@ -399,7 +399,7 @@ export async function saveTraceGeometry(
     leglocatie: input.leglocatie ?? existing.leglocatie,
   };
 
-  if (!useDatabase()) {
+  if (!databaseActief()) {
     demoStore.saveDemoTraceOverride(input.traceLegacyId, {
       ...merged,
       userModified: true,

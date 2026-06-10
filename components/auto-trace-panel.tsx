@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SourceBadge } from '@/components/source-badge';
-import { Check, GitBranch, Loader2, MapPin, Save, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { AfwegingsmatrixTabel } from '@/components/afwegingsmatrix-tabel';
+import { buildAfwegingsmatrix } from '@/lib/services/afwegingsmatrix';
+import { Check, GitBranch, Loader2, MapPin, Save, Scale, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import type { TraceRoutingResult, TraceRouteAlternative, TraceWaypoint } from '@/lib/services/trace-routing';
 import { cn } from '@/lib/utils';
 
@@ -88,10 +90,20 @@ export function AutoTracePanel({
   anthropicConfigured = false,
 }: AutoTracePanelProps) {
   const [showAi, setShowAi] = useState(true);
+  const [showMatrix, setShowMatrix] = useState(false);
 
   const activeAlt =
     result?.alternatieven?.find((a) => a.id === selectedAlternativeId) ??
     result?.alternatieven?.[0];
+
+  // Afwegingsmatrix (multicriteria-analyse) — pure functie, client-side berekend.
+  const afwegingsmatrix = useMemo(
+    () =>
+      result?.alternatieven && result.alternatieven.length >= 2
+        ? buildAfwegingsmatrix(result.alternatieven)
+        : null,
+    [result?.alternatieven]
+  );
 
   return (
     <div className="space-y-3">
@@ -213,6 +225,25 @@ export function AutoTracePanel({
                     onSelect={() => onSelectAlternative(alt.id)}
                   />
                 ))}
+
+                {afwegingsmatrix && (
+                  <div className="pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 w-full text-xs"
+                      onClick={() => setShowMatrix((v) => !v)}
+                    >
+                      <Scale className="mr-1 h-3 w-3" />
+                      {showMatrix ? 'Afwegingsmatrix verbergen' : 'Afwegingsmatrix tonen'}
+                    </Button>
+                    {showMatrix && (
+                      <div className="mt-2">
+                        <AfwegingsmatrixTabel matrix={afwegingsmatrix} />
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

@@ -31,6 +31,9 @@ export const VERVUILDE_GROND_PROVINCIAL_SOURCES: VervuildeGrondSourceDefinition[
     gemeente: 'Limburg',
     provider: 'wfs',
     baseUrl: LIMBURG_WFS,
+    // Uitgeschakeld: portal.prvlimburg.nl reageert traag/instabiel en vertraagt
+    // de data-verzameling. Weer inschakelen kan per aanvraag via enabledIds.
+    defaultEnabled: false,
     coverageBbox: LIMBURG_COVERAGE,
     testBbox: { minX: 175_000, minY: 310_000, maxX: 185_000, maxY: 320_000 },
     layers: [

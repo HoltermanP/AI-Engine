@@ -173,7 +173,7 @@ export const broVervuildeGrondConnector: DataConnector<BboxQuery, VervuildeGrond
       if (sad) parts.push(`SAD: ${sad.count} locaties (${sad.extractedAt.slice(0, 10)})`);
       else parts.push('SAD: seed ontbreekt — npm run data:extract-sad');
       parts.push(
-        `WMS: ${VERVUILDE_GROND_WMS_SOURCES.length} BRO + ${BODEM_REFERENCE_WMS_SOURCES.length} referentie (Bodemloket, PFAS, Limburg)`
+        `WMS: ${VERVUILDE_GROND_WMS_SOURCES.length} BRO + ${BODEM_REFERENCE_WMS_SOURCES.length} referentie (Bodemloket, PFAS)`
       );
       const extraParts = await testExtraSources();
       parts.push(...extraParts);

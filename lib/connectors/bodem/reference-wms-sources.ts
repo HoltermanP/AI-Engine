@@ -53,10 +53,13 @@ export const BODEM_REFERENCE_WMS_SOURCES: BodemWmsSource[] = [
     tiles: wmsTileUrl(RIVM_ALO_WMS, 'vw_rivm_20200131_meetlocaties_pfas'),
     opacity: 0.5,
   },
-  {
-    id: 'limburg-mijnsteen',
-    label: 'Provincie Limburg — mijnsteengebieden bodembesluit',
-    tiles: wmsTileUrl(LIMBURG_MILIEU_WMS, 'MIJNSTEENGEB_BESLUIT_BODEM_V'),
-    opacity: 0.55,
-  },
+  // Uitgeschakeld: de WMS van portal.prvlimburg.nl is traag/instabiel en
+  // veroorzaakt hangende tile-requests op de kaart. Herstel door dit blok
+  // terug te zetten zodra de dienst weer betrouwbaar is.
+  // {
+  //   id: 'limburg-mijnsteen',
+  //   label: 'Provincie Limburg — mijnsteengebieden bodembesluit',
+  //   tiles: wmsTileUrl(LIMBURG_MILIEU_WMS, 'MIJNSTEENGEB_BESLUIT_BODEM_V'),
+  //   opacity: 0.55,
+  // },
 ];

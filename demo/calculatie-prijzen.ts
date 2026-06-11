@@ -52,6 +52,8 @@ export const EENHEIDSPRIJZEN: Eenheidsprijs[] = [
   // 07 Aansluitingen
   { postnummer: '07.01.010', omschrijving: 'Eindmof / kabelkast plaatsen', eenheid: 'st', prijs: 1850, hoofdgroep: '07 Aansluitingen' },
   { postnummer: '07.02.010', omschrijving: 'Aansluiting netbeheerder (indicatief)', eenheid: 'st', prijs: 2400, hoofdgroep: '07 Aansluitingen' },
+  { postnummer: '07.03.010', omschrijving: 'Transformatorstation 400-630 kVA compleet (fundatie + montage)', eenheid: 'st', prijs: 68000, hoofdgroep: '07 Aansluitingen' },
+  { postnummer: '07.03.020', omschrijving: 'LS-verdeelkast plaatsen', eenheid: 'st', prijs: 5200, hoofdgroep: '07 Aansluitingen' },
 
   // 08 Projectkosten
   { postnummer: '08.01.010', omschrijving: 'Projectleiding / werkvoorbereiding', eenheid: 'post', prijs: 1, hoofdgroep: '08 Projectkosten' },

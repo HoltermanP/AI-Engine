@@ -8,6 +8,7 @@ import {
   RISICO_PERCENTAGE,
 } from '@/demo/calculatie-prijzen';
 import { traceLengthM } from '@/lib/geo';
+import { getDemoNetontwerp } from '@/lib/db/netontwerp-store';
 import { deriveCalculatiePosts } from './derive';
 import type {
   CalculatieHoofdgroep,
@@ -122,10 +123,39 @@ export function runCalculatie(trace: DemoTrace, project: DemoProject): Calculati
   };
 }
 
+/** Stationsposten (07.03.x) uit het netontwerp van het project. */
+function stationsRegels(projectId: string): CalculatieRegel[] {
+  const netontwerp = getDemoNetontwerp(projectId);
+  const stations = (netontwerp?.assets ?? []).filter((a) => a.type === 'station');
+  if (stations.length === 0) return [];
+
+  const regels: CalculatieRegel[] = [];
+  const maakRegel = (postnummer: string, aantal: number) => {
+    const prijs = prijsVoorPost(postnummer);
+    if (!prijs || aantal === 0) return;
+    regels.push({
+      postnummer: prijs.postnummer,
+      omschrijving: prijs.omschrijving,
+      hoofdgroep: prijs.hoofdgroep,
+      eenheid: prijs.eenheid,
+      hoeveelheid: aantal,
+      eenheidsprijs: prijs.prijs,
+      totaal: Math.round(aantal * prijs.prijs * 100) / 100,
+      toelichting: `Uit netontwerp "${netontwerp!.naam}"`,
+    });
+  };
+  maakRegel('07.03.010', stations.filter((s) => s.subtype !== 'ls_verdeelkast').length);
+  maakRegel('07.03.020', stations.filter((s) => s.subtype === 'ls_verdeelkast').length);
+  return regels;
+}
+
 export function runProjectCalculatie(traces: DemoTrace[], project: DemoProject): ProjectCalculatieResult {
   const traceCalculaties = traces.map((t) => runCalculatie(t, project));
 
   const geaggregeerd = new Map<string, CalculatieRegel>();
+  for (const regel of stationsRegels(project.id)) {
+    geaggregeerd.set(regel.postnummer, regel);
+  }
   for (const tc of traceCalculaties) {
     for (const r of tc.regels) {
       if (r.postnummer.startsWith('08.')) continue;

@@ -13,6 +13,7 @@ interface StapTraceProps {
   traces: MapTrace[];
   geselecteerdTraceId: string | undefined;
   onSelecteerTrace: (traceId: string) => void;
+  onNieuwTrace: (netvlak: 'LS' | 'MS') => void;
   opslagStatus: 'idle' | 'saving' | 'saved';
 }
 
@@ -26,10 +27,27 @@ export function StapTrace({
   traces,
   geselecteerdTraceId,
   onSelecteerTrace,
+  onNieuwTrace,
   opslagStatus,
 }: StapTraceProps) {
   return (
     <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => onNieuwTrace('LS')}
+          className="rounded-md border border-dashed border-[#960000]/50 px-2 py-2 text-xs font-medium text-[#960000] transition-colors hover:bg-[#960000]/5"
+        >
+          + Nieuwe LS-streng
+        </button>
+        <button
+          type="button"
+          onClick={() => onNieuwTrace('MS')}
+          className="rounded-md border border-dashed border-[#c80000]/50 px-2 py-2 text-xs font-medium text-[#c80000] transition-colors hover:bg-[#c80000]/5"
+        >
+          + Nieuwe MS-streng
+        </button>
+      </div>
       <div className="rounded-lg border border-border bg-card p-3 text-xs">
         <p className="font-semibold">Tracé schetsen</p>
         <ol className="mt-2 list-decimal space-y-1 pl-4 text-muted-foreground">

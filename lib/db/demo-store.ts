@@ -11,6 +11,18 @@ import type { Discipline } from './types';
 
 const traceOverrides = new Map<string, Partial<DemoTrace>>();
 
+/** In de sessie aangemaakte tracés (bijv. nieuwe strengen uit het netontwerp). */
+const createdTraces = new Map<string, DemoTrace>();
+
+export function addDemoTrace(trace: DemoTrace): void {
+  createdTraces.set(trace.id, trace);
+}
+
+export function removeDemoTrace(traceId: string): void {
+  createdTraces.delete(traceId);
+  traceOverrides.delete(traceId);
+}
+
 interface DemoTraceSession {
   collectedData?: CollectedTraceData;
   traceToets?: PersistedTraceToets;
@@ -56,14 +68,13 @@ export function getDemoProject(id: string) {
 }
 
 export function getDemoTraces(projectId?: string) {
-  const traces = projectId
-    ? DEMO_TRACES.filter((t) => t.projectId === projectId)
-    : DEMO_TRACES;
+  const alle = [...DEMO_TRACES, ...createdTraces.values()];
+  const traces = projectId ? alle.filter((t) => t.projectId === projectId) : alle;
   return traces.map(mergeTrace);
 }
 
 export function getDemoTrace(id: string) {
-  const base = DEMO_TRACES.find((t) => t.id === id);
+  const base = DEMO_TRACES.find((t) => t.id === id) ?? createdTraces.get(id);
   return base ? mergeTrace(base) : null;
 }
 

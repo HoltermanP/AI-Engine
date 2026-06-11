@@ -6,7 +6,8 @@ import type { Netontwerp, NetontwerpAsset, NetontwerpStap } from '@/lib/netontwe
 import { nieuweAansluitingDefaults } from '@/lib/netontwerp/belastingen';
 import { afgeleideStapStatus } from '@/lib/netontwerp/stappen';
 import { snapNaarLijnen } from '@/lib/netontwerp/chainage';
-import { saveNetontwerpAction } from '@/lib/actions/netontwerp';
+import { saveNetontwerpAction, maakNieuwTraceAction } from '@/lib/actions/netontwerp';
+import { demoTraceToMapTrace } from '@/lib/trace-edit';
 import { saveManualTraceAction } from '@/lib/actions/trace-routing';
 import { assetsNaarGeoJSON, aansluitingenNaarFeatures } from '@/lib/map/netontwerp-assets';
 import { MapWorkspace } from '@/components/map-workspace';
@@ -50,6 +51,7 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
     initieleOntwerp.traceIds[0] ?? initieleTraces[0]?.id,
   );
   const [plaatsModus, setPlaatsModus] = useState<PlaatsModus | null>(null);
+  const [geselecteerdAssetId, setGeselecteerdAssetId] = useState<string | null>(null);
   const [opslagStatus, setOpslagStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const setStap = useCallback(
@@ -181,13 +183,33 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
     [plaatsModus, ontwerp.assets, ontwerp.traceIds, geselecteerdTraceId, traceLinesById],
   );
 
+  const handleNieuwTrace = useCallback(
+    async (netvlak: 'LS' | 'MS') => {
+      const resultaat = await maakNieuwTraceAction(ontwerp, netvlak);
+      setOntwerp(resultaat.ontwerp);
+      setTraces((prev) => [demoTraceToMapTrace(resultaat.trace), ...prev]);
+      setGeselecteerdTraceId(resultaat.trace.id);
+    },
+    [ontwerp],
+  );
+
   const handleAssetClick = useCallback((assetId: string) => {
-    setOntwerp((prev) => {
-      const asset = prev.assets.find((a) => a.id === assetId);
-      if (!asset) return prev;
-      return prev; // selectie-popup volgt via kaart; verwijderen kan in de stappanelen
-    });
+    setGeselecteerdAssetId((prev) => (prev === assetId ? null : assetId));
   }, []);
+
+  const geselecteerdAsset = useMemo(
+    () => ontwerp.assets.find((a) => a.id === geselecteerdAssetId) ?? null,
+    [ontwerp.assets, geselecteerdAssetId],
+  );
+
+  const verwijderGeselecteerdAsset = useCallback(() => {
+    if (!geselecteerdAssetId) return;
+    setOntwerp((prev) => ({
+      ...prev,
+      assets: prev.assets.filter((a) => a.id !== geselecteerdAssetId),
+    }));
+    setGeselecteerdAssetId(null);
+  }, [geselecteerdAssetId]);
 
   /* ── Kaartdata ────────────────────────────────────────────────────── */
   const netontwerpAssets = useMemo(() => {
@@ -236,6 +258,30 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
 
         {/* Stappaneel */}
         <div className="w-full shrink-0 overflow-y-auto border-t border-border bg-background p-3 xl:w-[380px] xl:border-l xl:border-t-0">
+          {geselecteerdAsset && (
+            <div className="mb-3 rounded-lg border border-[#2D6FE8]/40 bg-[#2D6FE8]/5 p-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{geselecteerdAsset.naam}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {geselecteerdAsset.type} · {geselecteerdAsset.subtype} ·{' '}
+                    {geselecteerdAsset.bron}
+                    {geselecteerdAsset.positie.binding === 'chainage'
+                      ? ` · km ${(geselecteerdAsset.positie.chainageM / 1000).toFixed(3)}`
+                      : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={verwijderGeselecteerdAsset}
+                  className="shrink-0 rounded-md border border-destructive/40 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10"
+                >
+                  Verwijderen
+                </button>
+              </div>
+            </div>
+          )}
+
           {toonPalet.length > 0 && (
             <div className="mb-3 rounded-lg border border-border bg-card p-3">
               <AssetPalette
@@ -255,6 +301,7 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
               traces={traces}
               geselecteerdTraceId={geselecteerdTraceId}
               onSelecteerTrace={setGeselecteerdTraceId}
+              onNieuwTrace={handleNieuwTrace}
               opslagStatus={opslagStatus}
             />
           )}

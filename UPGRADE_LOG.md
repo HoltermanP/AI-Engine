@@ -49,3 +49,25 @@
 6. **Thermische berekening in de UI** ontsluiten (module + tests bestaan; nog geen paneel).
 7. **GEF-upload** voor sonderingen (parser ontbreekt; BRO-demo-CPT's werken al in het boorprofiel).
 8. **Echte multi-tenant row-scoping** zodra Clerk-organisaties actief worden gebruikt.
+
+## Nachtrun 2026-06-11/12 — Netontwerp-tekentool (elektra LS/MS) + boortekening-fix
+
+### Gebouwd
+1. **Boortekeningen gerepareerd** (gemeld door gebruiker): boorprofiel had een V-vorm tot −6,9 m NAP (Bézier naar het midden zonder horizontaal deel) en het boorplan tekende diepte als zijwaartse boog in bovenaanzicht. Nu: echte HDD-profielgeometrie (insteektangent → boog R → horizontaal op ontwerpdiepte → boog → uittredetangent) in `lib/drawings/bore-profile.ts` (`boreProfilePoints`, hergebruikt door de DXF-export), ontwerpdiepte uit vereiste dekking + methode-marge (`maxDiepteNap` in lib/bore/formulas.ts), booglengte uit werkelijke hoeken i.p.v. 2×90°, BorePlan draagt nu lengteM/maaiveld/grondwater/dekking (geen regex-parsing meer), dubbele "Schaal"-tekst weg.
+2. **Netontwerp-werkruimte** `/project/[id]/netontwerp` met 6 stappen volgens Liander-proces: belastingen & uitgangspunten → tracé schetsen → kabelberekening → stations & netopbouw → stationsontwerp → werktekening & uitvoering. Stap-navigatie met afgeleide statussen (lib/netontwerp/stappen.ts), deep-link `?stap=`.
+3. **Domeinlaag** lib/netontwerp/: types (Netontwerp, NetontwerpAsset met punt/chainage/chainagebereik-binding, Aansluiting, KabelKeuze, StationOntwerp), kabel-catalogus (16 LS/MS-specs, parse.ts-compatibele labels, `vindKabelAdvies` op spanningsval+belastbaarheid), chainage-wiskunde (punt↔metrering, snapping), belastingen (gelijktijdigheid per afnemertype, max stranglengte uit omgekeerde spanningsvalformule), stations-advies (belasting-gewogen k-means + N-1 + snap op MS-tracé), moffen-advies (haspellengte + eindmoffen + overgangsmof GPLK↔XLPE; mantelbuizen uit kruisingen), station-ontwerp (RMU-velden, trafokeuze, NH-zekeringen per LS-groep).
+4. **Kaart**: TraceMap-extensie (assets-source + 3 lagen + plaatsmodus + asset-klik, alles optioneel), lib/map/netontwerp-assets.ts (chainage→RD→WGS84), assetpalet, klik-plaatsing (station vrij punt, mof snapt op tracé), asset-selectie + verwijderen via kaartklik, aansluitingen als belastingpunten op de kaart.
+5. **Nieuwe strengen**: `maakNieuwTraceAction` + demo-store `addDemoTrace` — netarchitect kan nieuwe LS/MS-tracés aanmaken en schetsen; ze doen mee in de volledige bestaande keten.
+6. **Tekeningen**: eenlijnschema (MS-rail/lastscheiders/trafoveld/trafo/LS-rail/groepen, IEC 60617-stijl symbolen), stationsplattegrond (datagedreven binnenmaten), werktekening UO (mofsymbolen + chainagelabels + mantelbuizen + stations op BGT-achtergrond). DrawingType + structuur-eisen + doc-prefixen uitgebreid (TK-EEN/TK-SPL/TK-WRK).
+7. **Export**: DXF-variant `werktekening` (NLCS-lagen KR-NIEUW WERK-MOFFEN/-MANTELBUIS/-STATION), materiaallijst gebruikt werkelijke mofaantallen uit het netontwerp (heuristiek blijft fallback), stationspost 07.03.x in de projectcalculatie.
+8. **parseNetType** herkent nu 3x1x###/1x###-secties (repareert ook bestaande KLIC-labels als "10kV XLPE 1x240").
+9. **calc/stations.ts**: echte inputs (totaalKVA/aantal/trafoKVA/N-1) met demo-fallback.
+10. **Tests**: 160 totaal (was 136) — chainage round-trip, belastingen, kabeladvies, stationsclustering, boorprofielgeometrie, tekeningen, end-to-end ontwerpflow (lib/actions/netontwerp.test.ts). Browser-smoke (Playwright + Chrome) op stap 1/3/4 + nieuwe streng: geen consolefouten.
+
+### Let op
+- `npm run build` tijdens een draaiende dev-server sloopt `.next` → dev-server herstarten na een build.
+
+### Open
+- Asset-verslepen (drag) op de kaart; nu verwijderen + opnieuw plaatsen.
+- MS-ringstructuur (meerdere stations in één ring doorverbinden) is nog niet gemodelleerd; eenlijnschema gaat uit van ring-in/ring-uit per station.
+- Netontwerp-deliverables koppelen aan dossier/doc-codes.

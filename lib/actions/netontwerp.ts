@@ -1,8 +1,9 @@
 'use server';
 
 import { getDemoNetontwerp, saveDemoNetontwerp } from '@/lib/db/netontwerp-store';
-import { getDemoTrace, saveDemoTraceOverride } from '@/lib/db/demo-store';
-import { DEMO_TRACES } from '@/demo/traces';
+import { addDemoTrace, getDemoTrace, getDemoTraces, saveDemoTraceOverride } from '@/lib/db/demo-store';
+import { DEMO_TRACES, type DemoTrace } from '@/demo/traces';
+import type { Netvlak } from '@/lib/netontwerp/types';
 import type {
   Netontwerp,
   NetontwerpAsset,
@@ -48,6 +49,51 @@ export async function getNetontwerpAction(projectId: string): Promise<Netontwerp
 
 export async function saveNetontwerpAction(ontwerp: Netontwerp): Promise<Netontwerp> {
   return saveDemoNetontwerp(ontwerp);
+}
+
+/**
+ * Nieuwe streng (LS of MS) aanmaken vanuit het netontwerp. Het tracé start
+ * leeg en wordt in stap 2 op de kaart geschetst; daarna doet het mee in de
+ * hele bestaande keten (berekeningen, tekeningen, calculatie).
+ */
+export async function maakNieuwTraceAction(
+  ontwerp: Netontwerp,
+  netvlak: Netvlak,
+  naam?: string,
+): Promise<{ ontwerp: Netontwerp; trace: DemoTrace }> {
+  const discipline = netvlak === 'MS' ? 'elektra_ms' : 'elektra_ls';
+  const bestaande = getDemoTraces(ontwerp.projectId).filter((t) => t.discipline === discipline);
+  const volgnr = bestaande.length + 1;
+  const code = `EL-${netvlak}-N${String(volgnr).padStart(2, '0')}`;
+  const id = `trace-${netvlak.toLowerCase()}-nieuw-${ontwerp.projectId}-${volgnr}`;
+
+  const trace: DemoTrace = {
+    id,
+    projectId: ontwerp.projectId,
+    code,
+    naam: naam ?? `Nieuwe ${netvlak}-streng ${volgnr}`,
+    discipline,
+    netType:
+      netvlak === 'MS'
+        ? `${ontwerp.uitgangspunten.spanningMsKV}kV XLPE 3x1x240 Al`
+        : 'XLPE 4x240 Al',
+    fase: 'VO',
+    vereisteDekking: netvlak === 'MS' ? 1.0 : 0.6,
+    kleur: netvlak === 'MS' ? '#c80000' : '#960000',
+    wegnaam: '',
+    leglocatie: 'berm',
+    omschrijving: `Nieuwe ${netvlak}-streng uit netontwerp "${ontwerp.naam}"`,
+    coordinates: [],
+    traceLines: [[]],
+    segmenten: [],
+  };
+
+  addDemoTrace(trace);
+  const bijgewerkt = await saveDemoNetontwerp({
+    ...ontwerp,
+    traceIds: [...ontwerp.traceIds, id],
+  });
+  return { ontwerp: bijgewerkt, trace };
 }
 
 export interface KabelAdviesResultaat {

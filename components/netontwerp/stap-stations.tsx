@@ -11,11 +11,13 @@ import { Building2, Loader2, Sparkles, Trash2, TriangleAlert } from 'lucide-reac
 interface StapStationsProps {
   ontwerp: Netontwerp;
   onOntwerpChange: (ontwerp: Netontwerp) => void;
+  /** Stations gesorteerd langs het MS-tracé (ringvolgorde), indien MS-tracé aanwezig */
+  ringVolgorde?: { stationId: string; naam: string; chainageM: number }[];
 }
 
 let stationTeller = 0;
 
-export function StapStations({ ontwerp, onOntwerpChange }: StapStationsProps) {
+export function StapStations({ ontwerp, onOntwerpChange, ringVolgorde = [] }: StapStationsProps) {
   const [advies, setAdvies] = useState<StationsAdvies | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -96,6 +98,17 @@ export function StapStations({ ontwerp, onOntwerpChange }: StapStationsProps) {
           </div>
         )}
       </div>
+
+      {ringVolgorde.length > 1 && (
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-xs font-semibold">MS-ringvolgorde</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            voeding →{' '}
+            {ringVolgorde.map((r) => `${r.naam} (${(r.chainageM / 1000).toFixed(2)} km)`).join(' → ')}{' '}
+            → voeding
+          </p>
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-card p-3">
         <p className="text-xs font-semibold">Geplaatste stations ({stations.length})</p>

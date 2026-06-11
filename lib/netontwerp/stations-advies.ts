@@ -84,6 +84,24 @@ function clusterAansluitingen(
     .filter((c) => c.leden.length > 0);
 }
 
+/**
+ * Ringvolgorde: projecteer de stations op het MS-tracé en sorteer op
+ * metrering — zo ontstaat de logische ring (voeding → TS-1 → TS-2 → … → voeding).
+ */
+export function bepaalRingVolgorde(
+  stations: { id: string; naam: string; x: number; y: number }[],
+  msTraceLines: TraceLines,
+): { stationId: string; naam: string; chainageM: number }[] {
+  if (!msTraceLines.length) return [];
+  return stations
+    .map((s) => {
+      const snap = snapNaarLijnen(msTraceLines, s.x, s.y, 5000);
+      return snap ? { stationId: s.id, naam: s.naam, chainageM: Math.round(snap.chainageM) } : null;
+    })
+    .filter((s): s is { stationId: string; naam: string; chainageM: number } => s !== null)
+    .sort((a, b) => a.chainageM - b.chainageM);
+}
+
 export function adviseerStations(opts: {
   aansluitingen: Aansluiting[];
   uitgangspunten: NetontwerpUitgangspunten;

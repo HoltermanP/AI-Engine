@@ -6,6 +6,7 @@ import type { Netontwerp, NetontwerpAsset, NetontwerpStap } from '@/lib/netontwe
 import { nieuweAansluitingDefaults } from '@/lib/netontwerp/belastingen';
 import { afgeleideStapStatus } from '@/lib/netontwerp/stappen';
 import { snapNaarLijnen } from '@/lib/netontwerp/chainage';
+import { bepaalRingVolgorde } from '@/lib/netontwerp/stations-advies';
 import { saveNetontwerpAction, maakNieuwTraceAction } from '@/lib/actions/netontwerp';
 import { demoTraceToMapTrace } from '@/lib/trace-edit';
 import { saveManualTraceAction } from '@/lib/actions/trace-routing';
@@ -222,6 +223,19 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
 
   const stappenStatus = useMemo(() => afgeleideStapStatus(ontwerp), [ontwerp]);
 
+  const ringVolgorde = useMemo(() => {
+    const msTrace = traces.find((t) => t.discipline === 'elektra_ms');
+    const msLines = msTrace ? traceLinesById[msTrace.id] : undefined;
+    if (!msLines?.some((l) => l.length >= 2)) return [];
+    const stationPunten = ontwerp.assets
+      .filter((a) => a.type === 'station' && a.positie.binding === 'punt')
+      .map((a) => {
+        const pos = a.positie as { x: number; y: number };
+        return { id: a.id, naam: a.naam, x: pos.x, y: pos.y };
+      });
+    return bepaalRingVolgorde(stationPunten, msLines);
+  }, [traces, traceLinesById, ontwerp.assets]);
+
   const toonPalet: ('aansluiting' | 'station' | 'mof')[] =
     actieveStap === 'belastingen'
       ? ['aansluiting']
@@ -309,7 +323,11 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
             <StapKabel ontwerp={ontwerp} traces={traces} onOntwerpChange={setOntwerp} />
           )}
           {actieveStap === 'stations' && (
-            <StapStations ontwerp={ontwerp} onOntwerpChange={setOntwerp} />
+            <StapStations
+              ontwerp={ontwerp}
+              onOntwerpChange={setOntwerp}
+              ringVolgorde={ringVolgorde}
+            />
           )}
           {actieveStap === 'stationsontwerp' && (
             <StapStationsontwerp ontwerp={ontwerp} onOntwerpChange={setOntwerp} />

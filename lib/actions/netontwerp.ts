@@ -22,6 +22,7 @@ import { bouwStationOntwerp } from '@/lib/netontwerp/station-ontwerp';
 import { lijnLengteM } from '@/lib/netontwerp/chainage';
 import { calcElektraLs } from '@/lib/calc/elektra-ls';
 import { calcElektraMs } from '@/lib/calc/elektra-ms';
+import { berekenAmpacity, type GeleiderDoorsnede } from '@/lib/calc/thermisch';
 import type { CalcResult } from '@/lib/calc/types';
 import type { TraceLines } from '@/lib/trace-edit';
 import { generateStationEenlijn } from '@/lib/drawings/station-eenlijn';
@@ -157,6 +158,49 @@ export async function kabelAdviesAction(
     spanningKV: netvlak === 'MS' ? ontwerp.uitgangspunten.spanningMsKV : undefined,
   };
   const berekeningen = netvlak === 'MS' ? calcElektraMs(calcInput) : calcElektraLs(calcInput);
+
+  // IEC 60287-ampacity (vol thermisch model) voor MS-keuzes met geldige doorsnede
+  if (netvlak === 'MS' && [95, 150, 240, 400, 630].includes(advies.advies.sectieMm2)) {
+    try {
+      const thermisch = berekenAmpacity({
+        geleiderMm2: advies.advies.sectieMm2 as GeleiderDoorsnede,
+        materiaal: advies.advies.materiaal,
+        legpatroon: 'driehoek',
+        spanningKV: ontwerp.uitgangspunten.spanningMsKV,
+        legdiepteM: Math.max(trace.vereisteDekking + 0.1, 0.6),
+      });
+      berekeningen.push({
+        type: 'ampacity_iec60287',
+        discipline: trace.discipline,
+        categorie: 'elektra',
+        normReferentie: 'IEC 60287-1-1 / IEC 60287-2-1',
+        invoer: {
+          sectieMm2: advies.advies.sectieMm2,
+          materiaal: advies.advies.materiaal,
+          legpatroon: 'driehoek',
+          legdiepteM: Math.max(trace.vereisteDekking + 0.1, 0.6),
+          rhoBodem: '1,0 K·m/W (NL nat)',
+        },
+        resultaat: {
+          ampacityA: thermisch.ampacityA,
+          ontwerpstroomA: Math.round(stroomA),
+          benuttingPct: Math.round((stroomA / thermisch.ampacityA) * 100),
+          dominanteWeerstand: thermisch.dominanteWeerstand,
+          voldoet: stroomA <= thermisch.ampacityA * 0.8,
+        },
+        aannames: [
+          'Bodemtemperatuur 15 °C, max. geleidertemperatuur 90 °C (XLPE)',
+          'Eén circuit in driehoeksligging',
+        ],
+        conclusie:
+          stroomA <= thermisch.ampacityA * 0.8
+            ? `Thermisch ruim voldoende: ${Math.round(stroomA)} A ontwerp vs ${thermisch.ampacityA} A toelaatbaar (IEC 60287, ${thermisch.dominanteWeerstand} dominant)`
+            : `Thermische benutting hoog (${Math.round((stroomA / thermisch.ampacityA) * 100)}%) — grotere doorsnede of gunstiger ligging overwegen`,
+      });
+    } catch {
+      // >20 kV of onbekende sectie: vereenvoudigde berekening volstaat dan
+    }
+  }
 
   return {
     traceId,

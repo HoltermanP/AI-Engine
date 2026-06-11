@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adviseerStations } from './stations-advies';
+import { adviseerStations, bepaalRingVolgorde } from './stations-advies';
 import { defaultUitgangspunten, type Aansluiting } from './types';
 
 function aansluiting(id: string, x: number, y: number, kva: number): Aansluiting {
@@ -48,6 +48,19 @@ describe('stations-advies', () => {
       msTraceLines: [[[0, 0, -1], [200, 0, -1]]],
     });
     expect(advies.suggesties[0].y).toBeCloseTo(0, 1);
+  });
+
+  it('sorteert stations op metrering langs het MS-tracé (ringvolgorde)', () => {
+    const ring = bepaalRingVolgorde(
+      [
+        { id: 'b', naam: 'TS-B', x: 800, y: 40 },
+        { id: 'a', naam: 'TS-A', x: 100, y: -30 },
+      ],
+      [[[0, 0, -1], [1000, 0, -1]]],
+    );
+    expect(ring.map((r) => r.naam)).toEqual(['TS-A', 'TS-B']);
+    expect(ring[0].chainageM).toBe(100);
+    expect(ring[1].chainageM).toBe(800);
   });
 
   it('waarschuwt bij te lange strengen', () => {

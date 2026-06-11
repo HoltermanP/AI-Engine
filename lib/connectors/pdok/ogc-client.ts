@@ -1,6 +1,9 @@
 import type { BboxQuery } from '../types';
 
 const OGC_BASE = 'https://api.pdok.nl';
+
+/** Harde timeout per request — een hangende geodienst mag de berekening nooit blokkeren. */
+const PDOK_TIMEOUT_MS = 15_000;
 const RD_CRS = 'http://www.opengis.net/def/crs/EPSG/0/28992';
 const CRS84 = 'http://www.opengis.net/def/crs/OGC/1.3/CRS84';
 
@@ -23,6 +26,7 @@ export async function fetchPdokOgcFeatures(
   const res = await fetch(url.toString(), {
     headers: { Accept: 'application/geo+json' },
     cache: 'no-store',
+    signal: AbortSignal.timeout(PDOK_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -54,6 +58,7 @@ export async function fetchAllPdokOgcFeatures(
     const res = await fetch(url.toString(), {
       headers: { Accept: 'application/geo+json' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(PDOK_TIMEOUT_MS),
     });
 
     if (!res.ok) {

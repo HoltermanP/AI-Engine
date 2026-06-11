@@ -3,6 +3,7 @@ import type { BoreEngineeringResult } from '@/lib/bore/types';
 import type { DrawingResult } from './types';
 import { generateAllBorePlanDrawings } from './bore-plan';
 import { generateAllBoreProfileDrawings } from './bore-profile';
+import { generateAllBoreSetupDrawings } from './bore-setup';
 import { valideerTekening } from './format';
 
 export function generateBoreDrawings(
@@ -11,6 +12,7 @@ export function generateBoreDrawings(
 ): DrawingResult[] {
   const plans = generateAllBorePlanDrawings(trace, result);
   const profiles = generateAllBoreProfileDrawings(trace, result.segmenten);
+  const setups = generateAllBoreSetupDrawings(trace, result.segmenten);
 
   const drawings: DrawingResult[] = [
     ...plans.map((p) => ({
@@ -22,6 +24,13 @@ export function generateBoreDrawings(
     })),
     ...profiles.map((p) => ({
       type: 'bore_profile' as const,
+      label: p.label,
+      svg: p.svg,
+      formaat: 'svg' as const,
+      segmentVolgorde: p.volgorde,
+    })),
+    ...setups.map((p) => ({
+      type: 'bore_setup' as const,
       label: p.label,
       svg: p.svg,
       formaat: 'svg' as const,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,9 +13,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { CalculatieResult } from '@/lib/calculatie/types';
-import { generateCalculatieAction } from '@/lib/actions/calculatie';
+import { generateCalculatieAction, uploadBestekAction } from '@/lib/actions/calculatie';
 import { downloadBase64 } from '@/lib/export/download';
-import { Calculator, Download, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { Calculator, Download, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
 
 interface CalculatiePanelProps {
   traceId: string;
@@ -30,7 +30,11 @@ export function CalculatiePanel({ traceId, disabled }: CalculatiePanelProps) {
   const [calculatie, setCalculatie] = useState<CalculatieResult | null>(null);
   const [excelBase64, setExcelBase64] = useState<string | null>(null);
   const [filename, setFilename] = useState<string>('');
+  const [prijsBron, setPrijsBron] = useState<string | null>(null);
+  const [bestekNaam, setBestekNaam] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const bestekInputRef = useRef<HTMLInputElement>(null);
+  const projectIdRef = useRef<string | null>(null);
 
   function handleCalculeren() {
     startTransition(async () => {
@@ -38,7 +42,37 @@ export function CalculatiePanel({ traceId, disabled }: CalculatiePanelProps) {
       setCalculatie(res.calculatie);
       setExcelBase64(res.excelBase64);
       setFilename(res.filename);
+      setPrijsBron(res.prijsBron.toelichting);
+      projectIdRef.current = res.calculatie.projectId;
     });
+  }
+
+  function handleBestekFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      startTransition(async () => {
+        // ProjectId via een eerste (stille) calculatie als die nog onbekend is
+        if (!projectIdRef.current) {
+          const res = await generateCalculatieAction(traceId);
+          projectIdRef.current = res.calculatie.projectId;
+        }
+        const result = await uploadBestekAction(
+          projectIdRef.current!,
+          file.name,
+          String(reader.result ?? '')
+        );
+        if (result.ok) {
+          setBestekNaam(file.name);
+          setPrijsBron(result.melding);
+        } else {
+          setPrijsBron(result.melding);
+        }
+      });
+    };
+    reader.readAsText(file);
   }
 
   function handleDownload() {
@@ -60,11 +94,28 @@ export function CalculatiePanel({ traceId, disabled }: CalculatiePanelProps) {
           <div>
             <p className="text-sm font-medium text-foreground">Calculatie</p>
             <p className="text-xs text-muted-foreground">
-              Materialen en taken afgeleid uit tracé — posten met fictieve eenheidsprijzen
+              {bestekNaam
+                ? `Bestek "${bestekNaam}" is leidend voor de prijzen`
+                : 'Zonder bestek prijst AI op basis van de beschikbare informatie'}
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={bestekInputRef}
+            type="file"
+            accept=".txt,.csv,.md,.json,text/plain"
+            className="hidden"
+            onChange={handleBestekFile}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => bestekInputRef.current?.click()}
+            disabled={isPending}
+          >
+            <Upload className="mr-1 h-3 w-3" /> {bestekNaam ? 'Bestek vervangen' : 'Bestek invoegen'}
+          </Button>
           {excelBase64 && (
             <Button size="sm" variant="outline" onClick={handleDownload}>
               <Download className="mr-1 h-3 w-3" /> Excel
@@ -85,6 +136,10 @@ export function CalculatiePanel({ traceId, disabled }: CalculatiePanelProps) {
           </Button>
         </div>
       </div>
+
+      {prijsBron && (
+        <p className="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-1.5 text-[11px] text-emerald-800">{prijsBron}</p>
+      )}
 
       {calculatie && (
         <div className="space-y-4">

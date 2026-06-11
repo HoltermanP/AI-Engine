@@ -71,8 +71,63 @@ export function getDemoTraceByDiscipline(discipline: Discipline) {
   return DEMO_TRACES.find((t) => t.discipline === discipline) ?? null;
 }
 
+/**
+ * Geüploade of via API geladen K&L-lagen van netbeheerders/waterbedrijven.
+ * In-memory naast de demo-data (geen DB-migraties); per bron vervangbaar.
+ */
+const externeNetten = new Map<string, (typeof DEMO_BESTAAND_NET)[number][]>();
+
+export function setDemoExterneNetLaag(
+  bronId: string,
+  items: (typeof DEMO_BESTAAND_NET)[number][]
+): void {
+  externeNetten.set(bronId, items);
+}
+
+export function getDemoExterneNetLagen(): { bronId: string; aantal: number }[] {
+  return [...externeNetten.entries()].map(([bronId, items]) => ({
+    bronId,
+    aantal: items.length,
+  }));
+}
+
 export function getDemoBestaandNet() {
-  return DEMO_BESTAAND_NET;
+  const extern = [...externeNetten.values()].flat();
+  return extern.length > 0 ? [...DEMO_BESTAAND_NET, ...extern] : DEMO_BESTAAND_NET;
+}
+
+/** Bestek per project: leidend voor alle calculaties zodra geüpload. */
+const bestekken = new Map<string, { naam: string; inhoud: string; geuploadOp: string }>();
+
+export function setDemoBestek(projectId: string, naam: string, inhoud: string): void {
+  bestekken.set(projectId, { naam, inhoud, geuploadOp: new Date().toISOString() });
+}
+
+export function getDemoBestek(
+  projectId: string
+): { naam: string; inhoud: string; geuploadOp: string } | null {
+  return bestekken.get(projectId) ?? null;
+}
+
+/**
+ * Referentietracés: eerder ontworpen (goedgekeurde) tracés die als
+ * leervoorbeeld zijn geüpload. De router gebruikt ze als voorkeurscorridors.
+ */
+export interface DemoReferentieTrace {
+  id: string;
+  naam: string;
+  bron: string;
+  coordinates: [number, number][];
+}
+
+const referentieTraces: DemoReferentieTrace[] = [];
+
+export function addDemoReferentieTraces(items: DemoReferentieTrace[]): void {
+  referentieTraces.push(...items);
+}
+
+export function getDemoReferentieTraces(): DemoReferentieTrace[] {
+  return referentieTraces;
 }
 
 export function getDemoSonderingen() {

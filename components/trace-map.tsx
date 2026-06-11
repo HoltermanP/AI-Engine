@@ -125,6 +125,8 @@ export interface MapNet {
   thema: string;
   beheerder: string;
   coordinates: [number, number, number?][];
+  /** Minimale parallelafstand (m) conform netbeheerder/NEN 7171 */
+  vrijTeHoudenAfstand?: number;
 }
 
 export interface MapLayerData {
@@ -133,7 +135,7 @@ export interface MapLayerData {
   bomen?: { id: string; x: number; y: number }[];
   nwb?: { naam: string; type: string; coordinates: [number, number][] }[];
   percelen?: { id: string; perceelnummer: string; polygon: [number, number][] }[];
-  watergangen?: { naam: string; type: string; coordinates: [number, number][] }[];
+  watergangen?: { naam: string; type: string; coordinates: [number, number][]; breedteM?: number }[];
   kunstwerken?: { naam: string; type: string; x: number; y: number }[];
   sonderingen?: { id: string; x: number; y: number; qc: number; grondsoort: string }[];
   grondwater?: { id: string; x: number; y: number; standNap: number }[];
@@ -192,6 +194,11 @@ interface TraceMapProps {
   }[];
   onMapClick?: (lng: number, lat: number) => void;
   onTraceLinesChange?: (lines: TraceLines) => void;
+  /** Netontwerp-assets (stations/moffen als punten, mantelbuizen als lijnen) — render-klaar GeoJSON */
+  netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
+  /** Plaatsmodus actief: kaartkliks gaan naar onMapClick, cursor wordt crosshair */
+  plaatsModusActief?: boolean;
+  onAssetClick?: (assetId: string) => void;
   onViewportChange?: (viewport: MapViewport) => void;
   onLayerToggle?: (layerId: string, visible: boolean) => void;
   onLayerControlReady?: (props: {
@@ -258,8 +265,18 @@ const BELEMMERING_KLEUR: Record<string, string> = {
 
 const BASEMAPS: Record<
   BasemapId,
-  { label: string; tiles: string[]; attribution: string; maxzoom?: number }
+  { label: string; tiles: string[]; attribution: string; maxzoom?: number; vanafZoom?: number }
 > = {
+  bgt: {
+    label: BASEMAP_OPTIONS.bgt,
+    tiles: [
+      'https://service.pdok.nl/lv/bgt/wmts/v1_0/standaardvisualisatie/EPSG:3857/{z}/{x}/{y}.png',
+    ],
+    attribution: '© Kadaster / PDOK BGT',
+    maxzoom: 19,
+    // PDOK rendert de BGT-visualisatie pas vanaf dit zoomniveau
+    vanafZoom: 16.5,
+  },
   brt: {
     label: BASEMAP_OPTIONS.brt,
     tiles: [
@@ -666,6 +683,9 @@ export function TraceMap({
   onViewportChange,
   onLayerToggle,
   onLayerControlReady,
+  netontwerpAssets,
+  plaatsModusActief = false,
+  onAssetClick,
 }: TraceMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -674,6 +694,10 @@ export function TraceMap({
   const streetViewModeRef = useRef(false);
   const drawModeRef = useRef(drawMode);
   drawModeRef.current = drawMode;
+  const plaatsModusRef = useRef(plaatsModusActief);
+  plaatsModusRef.current = plaatsModusActief;
+  const onAssetClickRef = useRef(onAssetClick);
+  onAssetClickRef.current = onAssetClick;
   const tracesRef = useRef(traces);
   tracesRef.current = traces;
   const selectedTraceIdRef = useRef(selectedTraceId);
@@ -692,7 +716,8 @@ export function TraceMap({
     moved: boolean;
   } | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [basemap, setBasemap] = useState<BasemapId>('brt');
+  // BGT als standaard: exacte pandcontouren in plaats van gegeneraliseerde BRT-blokken
+  const [basemap, setBasemap] = useState<BasemapId>('bgt');
   const [streetViewMode, setStreetViewMode] = useState(false);
   const [streetViewPoint, setStreetViewPoint] = useState<{ lat: number; lng: number } | null>(null);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
@@ -920,6 +945,14 @@ export function TraceMap({
         style: {
           version: 8,
           sources: {
+            // Terugvallaag: BRT op afstand (BGT rendert pas vanaf zoom ~16)
+            'basemap-fallback': {
+              type: 'raster',
+              tiles: BASEMAPS.brt.tiles,
+              tileSize: 256,
+              attribution: BASEMAPS.brt.attribution,
+              maxzoom: BASEMAPS.brt.maxzoom ?? 19,
+            },
             basemap: {
               type: 'raster',
               tiles: BASEMAPS[basemap].tiles,
@@ -928,7 +961,15 @@ export function TraceMap({
               maxzoom: BASEMAPS[basemap].maxzoom ?? 19,
             },
           },
-          layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+          layers: [
+            { id: 'basemap-fallback', type: 'raster', source: 'basemap-fallback' },
+            {
+              id: 'basemap',
+              type: 'raster',
+              source: 'basemap',
+              minzoom: BASEMAPS[basemap].vanafZoom ?? 0,
+            },
+          ],
         },
         center: center as [number, number],
         zoom: 14,
@@ -963,6 +1004,8 @@ export function TraceMap({
     if (source?.setTiles) {
       source.setTiles(BASEMAPS[basemap].tiles);
     }
+    // BGT rendert pas vanaf zoom ~16: daaronder valt de kaart terug op BRT
+    map.setLayerZoomRange('basemap', BASEMAPS[basemap].vanafZoom ?? 0, 24);
   }, [basemap, mapReady]);
 
   useEffect(() => {
@@ -997,7 +1040,7 @@ export function TraceMap({
 
     const onClick = (...args: unknown[]) => {
       const e = args[0] as { lngLat: { lng: number; lat: number } };
-      if (drawModeRef.current !== 'none' && onMapClick) {
+      if ((drawModeRef.current !== 'none' || plaatsModusRef.current) && onMapClick) {
         if (skipClickRef.current) {
           skipClickRef.current = false;
           return;
@@ -1011,13 +1054,99 @@ export function TraceMap({
 
     map.on('click', onClick);
     map.getCanvas().style.cursor =
-      drawMode === 'edit' ? 'default' : drawMode !== 'none' || streetViewMode ? 'crosshair' : '';
+      drawMode === 'edit'
+        ? 'default'
+        : drawMode !== 'none' || plaatsModusActief || streetViewMode
+          ? 'crosshair'
+          : '';
 
     return () => {
       map.off('click', onClick);
       map.getCanvas().style.cursor = '';
     };
-  }, [mapReady, streetViewMode, drawMode, onMapClick]);
+  }, [mapReady, streetViewMode, drawMode, plaatsModusActief, onMapClick]);
+
+  // Netontwerp-assets: stations/moffen (punten) + mantelbuizen (lijnen)
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibreModule = maplibreRef.current;
+    if (!map || !mapReady || !maplibreModule) return;
+
+    const puntData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: netontwerpAssets?.punten ?? [],
+    };
+    const lijnData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: netontwerpAssets?.lijnen ?? [],
+    };
+
+    const puntSource = map.getSource('netontwerp-assets-punt') as
+      | { setData: (d: GeoJSON.FeatureCollection) => void }
+      | undefined;
+    if (puntSource) {
+      puntSource.setData(puntData);
+      (map.getSource('netontwerp-assets-lijn') as { setData: (d: GeoJSON.FeatureCollection) => void })
+        ?.setData(lijnData);
+      return;
+    }
+    if (puntData.features.length === 0 && lijnData.features.length === 0) return;
+
+    map.addSource('netontwerp-assets-lijn', { type: 'geojson', data: lijnData });
+    map.addLayer({
+      id: 'netontwerp-mantelbuis-line',
+      type: 'line',
+      source: 'netontwerp-assets-lijn',
+      paint: {
+        'line-color': ['get', 'kleur'],
+        'line-width': 7,
+        'line-opacity': 0.7,
+        'line-dasharray': [2, 1],
+      },
+    });
+
+    map.addSource('netontwerp-assets-punt', { type: 'geojson', data: puntData });
+    map.addLayer({
+      id: 'netontwerp-assets-circle',
+      type: 'circle',
+      source: 'netontwerp-assets-punt',
+      paint: {
+        'circle-radius': ['match', ['get', 'assetType'], 'station', 10, 5],
+        'circle-color': ['get', 'kleur'],
+        'circle-stroke-width': ['match', ['get', 'assetType'], 'station', 3, 1.5],
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.95,
+      },
+    });
+    map.addLayer({
+      id: 'netontwerp-assets-label',
+      type: 'symbol',
+      source: 'netontwerp-assets-punt',
+      minzoom: 14,
+      layout: {
+        'text-field': ['get', 'naam'],
+        'text-size': 10,
+        'text-offset': [0, 1.4],
+        'text-anchor': 'top',
+      },
+      paint: {
+        'text-color': '#1F2937',
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 1.5,
+      },
+    });
+
+    const onAssetLayerClick = (...args: unknown[]) => {
+      const e = args[0] as { features?: { properties?: Record<string, unknown> }[] };
+      const id = e.features?.[0]?.properties?.id;
+      if (id && onAssetClickRef.current) {
+        skipClickRef.current = true;
+        onAssetClickRef.current(String(id));
+      }
+    };
+    map.on('click', 'netontwerp-assets-circle', onAssetLayerClick);
+    map.on('click', 'netontwerp-mantelbuis-line', onAssetLayerClick);
+  }, [netontwerpAssets, mapReady]);
 
   const tracePopupHandlerRef = useRef<((...args: unknown[]) => void) | null>(null);
 
@@ -1843,7 +1972,7 @@ export function TraceMap({
             source: 'bodem-risico-gebied-source',
             paint: {
               'fill-color': ['get', 'kleur'],
-              'fill-opacity': 0.12,
+              'fill-opacity': 0.25,
             },
           });
           map.addLayer({
@@ -1852,7 +1981,8 @@ export function TraceMap({
             source: 'bodem-risico-gebied-source',
             paint: {
               'line-color': ['get', 'kleur'],
-              'line-width': 3,
+              'line-width': 2,
+              'line-dasharray': [3, 2],
             },
           });
           addClickPopup('bodem-risico-gebied-fill', (p) => {
@@ -2142,11 +2272,11 @@ export function TraceMap({
   ]);
 
   return (
-    <div className="relative h-full min-h-[400px] w-full" style={{ height }}>
-      <div ref={mapContainer} className="h-full min-h-[400px] w-full rounded-lg" />
+    <div className="relative h-full min-h-[280px] w-full" style={{ height }}>
+      <div ref={mapContainer} className="h-full min-h-[280px] w-full rounded-lg" />
 
       {showLayerPanel && (
-      <div className="absolute left-3 top-3 max-h-[calc(100%-24px)] w-56 overflow-y-auto rounded-lg border border-border bg-card/95 p-3 shadow-sm backdrop-blur-sm">
+      <div className="absolute left-3 top-3 max-h-[calc(100%-24px)] w-56 max-w-[calc(100%-24px)] overflow-y-auto rounded-lg border border-border bg-card/95 p-3 shadow-sm backdrop-blur-sm">
         <div className="mb-2 flex items-center gap-2">
           <SourceBadge source={dataSource} />
           <span className="text-xs text-muted-foreground">Datalagen</span>

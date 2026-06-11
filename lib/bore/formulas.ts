@@ -6,8 +6,8 @@ export function minBoogstraalM(buisDiameterMm: number, methode: BoreMethode): nu
   return (buisDiameterMm / 1000) * factor;
 }
 
-/** Booglengte bij constante straal over boog van 90° (indicatief). */
-export function booglengteM(boogstraalM: number, hoekDeg = 90): number {
+/** Booglengte bij constante straal over de werkelijke in-/uittredehoek. */
+export function booglengteM(boogstraalM: number, hoekDeg: number): number {
   return (Math.PI * boogstraalM * hoekDeg) / 180;
 }
 
@@ -49,15 +49,32 @@ export function kroonDekkingM(maaiveldNap: number, kroonNap: number): number {
   return maaiveldNap - kroonNap;
 }
 
-/** Max diepte NAP uit boog (entry/exit + radius). */
+/** Extra gronddekking bovenop de vereiste dekking, per methode (m). */
+export function dekkingMargeM(methode: BoreMethode): number {
+  return methode === 'hdd' ? 1.2 : methode === 'persing' ? 1.0 : 0.6;
+}
+
+/**
+ * Ontwerpdiepte (m NAP) van de boorgat-as: de diepte volgt uit de vereiste
+ * dekking + methode-marge + buisdiameter, begrensd door wat de boog
+ * (R, in-/uittredehoek) minimaal aan diepte oplevert en door de
+ * ontwerpdiepte van het tracé zelf.
+ */
 export function maxDiepteNap(
   maaiveldNap: number,
   diepteAsNap: number,
   boogstraalM: number,
   entryAngleDeg: number,
+  vereisteDekking: number,
+  buisDiameterMm: number,
+  methode: BoreMethode,
 ): number {
-  const entryDrop = boogstraalM * (1 - Math.cos((entryAngleDeg * Math.PI) / 180));
-  return Math.min(diepteAsNap, maaiveldNap - entryDrop - boogstraalM * 0.05);
+  const boogdropM = boogstraalM * (1 - Math.cos((entryAngleDeg * Math.PI) / 180));
+  const ontwerpDiepteOnderMv = Math.max(
+    vereisteDekking + dekkingMargeM(methode) + buisDiameterMm / 1000,
+    boogdropM,
+  );
+  return Math.min(diepteAsNap, maaiveldNap - ontwerpDiepteOnderMv);
 }
 
 /** Putafmetingen (L×B×D) op basis van methode. */

@@ -101,6 +101,7 @@ export function ProcessStepsPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [streamingRapport, setStreamingRapport] = useState<OnderzoekDocument | null>(null);
   const [streamCharCount, setStreamCharCount] = useState(0);
+  const [streamError, setStreamError] = useState<string | null>(null);
 
   const activeRapport =
     streamingRapport ??
@@ -111,6 +112,10 @@ export function ProcessStepsPanel({
   function upsertRapport(rapport: OnderzoekDocument) {
     onRapportenChange((prev) => mergeRapport(prev, rapport));
     setActiveRapportType(rapport.type);
+    // Autosave: elk gegenereerd rapport gaat direct het dossier in
+    void saveOnderzoekAction(traceId, rapport, linkedActionId).then(() => {
+      setSavedTypes((prev) => new Set([...prev, rapport.type]));
+    });
   }
 
   function canStart(stepId: ProcessStepId): boolean {
@@ -154,9 +159,14 @@ export function ProcessStepsPanel({
     onRapportenChange((prev) =>
       prev.map((r) => (r.type === updated.type ? updated : r))
     );
+    // Autosave: elke AI-bewerking direct in het dossier
+    void saveOnderzoekAction(traceId, updated, linkedActionId).then(() => {
+      setSavedTypes((prev) => new Set([...prev, updated.type]));
+    });
   }
 
   async function runQuickscan(stepId: ProcessStepId, onderzoekType: OnderzoekType) {
+    setStreamError(null);
     try {
       const final = await streamRapportGeneratie(
         {
@@ -178,7 +188,7 @@ export function ProcessStepsPanel({
                     ...prev,
                     inhoud: accumulated,
                     status: 'in_uitvoering',
-                    _source: anthropicConfigured ? 'live' : 'demo',
+                    _source: 'live',
                   }
                 : null
             );
@@ -189,6 +199,7 @@ export function ProcessStepsPanel({
           },
           onError: (message) => {
             console.error(`[ProcessStepsPanel] stream ${stepId}:`, message);
+            setStreamError(message);
           },
         }
       );
@@ -198,6 +209,7 @@ export function ProcessStepsPanel({
       }
     } catch (err) {
       console.error(`[ProcessStepsPanel] quickscan ${stepId} mislukt:`, err);
+      setStreamError(err instanceof Error ? err.message : 'Rapportgeneratie mislukt');
       onStatusChange(stepId, 'open');
     } finally {
       setStreamingRapport(null);
@@ -219,7 +231,7 @@ export function ProcessStepsPanel({
           titel: stepMeta?.label ?? 'Onderzoeksrapport',
           status: 'in_uitvoering',
           inhoud: '',
-          _source: anthropicConfigured ? 'live' : 'demo',
+          _source: 'live',
         });
       });
       onStatusChange(stepId, 'bezig');
@@ -295,7 +307,7 @@ export function ProcessStepsPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden lg:flex-row">
-      <div className="flex w-full shrink-0 flex-col overflow-auto border-b border-border lg:w-80 lg:border-b-0 lg:border-r">
+      <div className="flex max-h-[45dvh] w-full shrink-0 flex-col overflow-auto border-b border-border lg:max-h-none lg:w-80 lg:border-b-0 lg:border-r">
         <div className="p-4 pb-2">
           <h3 className="text-sm font-medium text-foreground">Onderzoeken & proces</h3>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -309,9 +321,7 @@ export function ProcessStepsPanel({
                 <p className="text-xs font-medium text-[#2D6FE8]">
                   {streamingRapport && streamCharCount > 0
                     ? 'Tekst wordt live opgebouwd'
-                    : anthropicConfigured
-                      ? 'AI genereert rapport'
-                      : 'Rapport wordt opgesteld'}
+                    : 'AI genereert rapport'}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {bulkGenerating
@@ -324,6 +334,12 @@ export function ProcessStepsPanel({
                   )}
                 </p>
               </div>
+            </div>
+          )}
+          {streamError && !runningStep && !streamingRapport && (
+            <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2">
+              <p className="text-xs font-medium text-red-600">AI-rapportgeneratie mislukt</p>
+              <p className="mt-0.5 text-[10px] text-red-700/80">{streamError}</p>
             </div>
           )}
         </div>
@@ -408,7 +424,7 @@ export function ProcessStepsPanel({
         </div>
       </div>
 
-      <div className="flex min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
         {rapporten.length > 0 && (
           <div className="flex flex-wrap gap-1 border-b border-border bg-muted/30 px-2 py-1.5">
             {rapporten.map((r) => (

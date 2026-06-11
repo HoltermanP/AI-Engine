@@ -3,9 +3,9 @@ import { notFound } from 'next/navigation';
 import { MapWorkspace } from '@/components/map-workspace';
 import { Badge } from '@/components/ui/badge';
 import { ProjectActionsPanel } from '@/components/project-actions-panel';
-import { ProjectProcessNav, ProjectProcessHint } from '@/components/project-process-nav';
 import { ProjectStatusOverview } from '@/components/project-status-overview';
 import { ProjectFaseOverzicht } from '@/components/project-fase-overzicht';
+import { VolgendeStapCta } from '@/components/volgende-stap-cta';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProgressBar } from '@/components/progress-bar';
 import { getProject, getTraces, getBestaandNet } from '@/lib/db/store';
@@ -17,8 +17,6 @@ import { AlertTriangle, ArrowRight } from 'lucide-react';
 import { ProjectCalculatieButton } from '@/components/project-calculatie-button';
 import { cn } from '@/lib/utils';
 import type { TraceFase } from '@/lib/db/types';
-import type { ProjectProcessStepId } from '@/lib/navigation/project-process';
-import type { StepperStatus } from '@/components/process-stepper';
 
 const FASE_COLORS: Record<TraceFase, string> = {
   VO: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
@@ -42,34 +40,22 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const firstTraceId = traces[0]?.id ?? null;
   const deliverableRecords = deriveDeliverableStatuses(traces);
 
-  const stepStatuses: Partial<Record<ProjectProcessStepId, StepperStatus>> = {
-    overzicht: 'bezig',
-    trace: summary.voortgang > 0 ? (summary.voortgang >= 100 ? 'gereed' : 'bezig') : 'open',
-    planning: summary.voortgang >= 50 ? 'bezig' : 'open',
-    dossier: summary.voortgang >= 80 ? 'bezig' : 'open',
-    rapportage: summary.voortgang >= 100 ? 'gereed' : 'open',
-  };
-
   return (
-      <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-        <div className="shrink-0 space-y-2 border-b border-border/60 bg-white/60 px-4 py-3 backdrop-blur-sm">
-          <ProjectProcessNav
+      <div className="flex flex-col lg:h-[calc(100dvh-3.5rem)]">
+        <div className="shrink-0 space-y-2 border-b border-border/60 bg-white/60 px-3 py-3 backdrop-blur-sm sm:px-4">
+          <ProjectFaseOverzicht records={deliverableRecords} />
+          <VolgendeStapCta
+            records={deliverableRecords}
             projectId={id}
             firstTraceId={firstTraceId}
-            stepStatuses={stepStatuses}
           />
-          <ProjectProcessHint projectId={id} />
-        </div>
-
-        <div className="shrink-0 border-b border-border/60 px-4 py-3">
-          <ProjectFaseOverzicht records={deliverableRecords} />
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <div className="panel-sidebar flex w-full flex-col lg:w-[26rem] xl:w-[28rem]">
+        <div className="panel-sidebar flex w-full flex-col lg:w-[24rem] xl:w-[26rem]">
           <div className="relative overflow-hidden border-b border-border/60 p-5">
             <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#2D6FE8]/10 blur-2xl" />
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#2D6FE8]">Stap 1 · Projectoverzicht</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#2D6FE8]">Projectoverzicht</p>
             <h1 className="relative mt-1 font-[family-name:var(--font-space-grotesk)] text-xl font-bold tracking-tight text-[#0D1428]">
               {project.naam}
             </h1>
@@ -83,6 +69,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                   className="inline-flex items-center gap-1 rounded-full bg-[#2D6FE8] px-3 py-1 text-[10px] font-medium text-white transition-colors hover:bg-[#2563d4]"
                 >
                   Start tracé-engineering
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              )}
+              {traces.some((t) => t.discipline === 'elektra_ls' || t.discipline === 'elektra_ms') && (
+                <Link
+                  href={`/project/${id}/netontwerp`}
+                  className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-3 py-1 text-[10px] font-medium text-white transition-colors hover:bg-violet-700"
+                >
+                  Netontwerp (LS/MS)
                   <ArrowRight className="h-3 w-3" />
                 </Link>
               )}
@@ -170,7 +165,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </div>
         </div>
 
-        <div className="flex min-h-[400px] flex-1 flex-col lg:min-h-0">
+        <div className="flex h-[55dvh] min-h-[360px] flex-1 flex-col lg:h-auto lg:min-h-0">
           <MapWorkspace
             traces={traces}
             bestaandNet={bestaandNet}

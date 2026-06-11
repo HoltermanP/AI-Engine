@@ -14,7 +14,11 @@ export function parseNetType(netType: string, discipline: Discipline): ParsedNet
   const t = netType.toUpperCase();
   const spec: ParsedNetSpec = {};
 
-  const sectieMatch = netType.match(/4x(\d+)/i) ?? netType.match(/(\d+)\s*mm²/i);
+  const sectieMatch =
+    netType.match(/3x1x(\d+)/i) ??
+    netType.match(/4x(\d+)/i) ??
+    netType.match(/(?:^|\s)[13]x(\d+)/i) ??
+    netType.match(/(\d+)\s*mm²/i);
   if (sectieMatch) spec.sectieMm2 = Number(sectieMatch[1]);
 
   const dnMatch = t.match(/DN\s*(\d+)/) ?? t.match(/PE\s*(\d+)/);

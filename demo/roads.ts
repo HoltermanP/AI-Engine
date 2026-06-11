@@ -27,6 +27,24 @@ function legacyWegenAliases(wegen: DemoWeg[]): DemoWeg[] {
 
 export type Leglocatie = 'onder_verharding' | 'berm' | 'parallelweg' | 'vrije_oever' | 'hdd';
 
+export interface TraceKruising {
+  type: 'weg' | 'water' | 'spoor' | 'natuur' | 'bebouwing';
+  naam: string;
+  breedteM?: number;
+  legtechniek: 'open_ontgraving' | 'hdd' | 'persing' | 'sleufloos';
+  /** Gekozen uitvoeringsmethode (asfaltzagen, nanodrill, gestuurde boring, …) */
+  methode?: string;
+  methodeLabel?: string;
+  beheerder?: string;
+  vergunning?: string;
+  normReferentie?: string;
+  /** Afweging: gekozen oplossing + afgewezen alternatieven */
+  afweging?: string[];
+  /** Kruisingslocatie (RD) voor annotatie op de tekening */
+  x?: number;
+  y?: number;
+}
+
 export interface TraceSegment {
   volgorde: number;
   wegId: string;
@@ -34,6 +52,10 @@ export interface TraceSegment {
   leglocatie: Leglocatie;
   legtechniek: 'open_ontgraving' | 'hdd' | 'persing' | 'sleufloos';
   lengteM: number;
+  /** Kruisingen met gekozen uitvoeringsmethode en afweging */
+  kruisingen?: TraceKruising[];
+  /** Gemotiveerde afwijkingen van de richtlijnen (wat + waarom + maatregel) */
+  afwijkingen?: string[];
 }
 
 /** Genereer tracépunten langs weg met offset (m) en constante diepte */

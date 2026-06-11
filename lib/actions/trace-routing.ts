@@ -91,6 +91,36 @@ export async function saveManualTraceAction(
     return { ok: false, error: 'Geen geldige tracégeometrie om op te slaan (minimaal 2 punten)' };
   }
 
+  // Pand-guard: ook handmatig getekende of vertex-bewerkte tracés mogen nooit
+  // onder bebouwing door. Toets tegen live BGT (pand + overig bouwwerk).
+  try {
+    const { fetchBebouwingVoorLijn } = await import(
+      '@/lib/services/trace-routing/fetch-routing-layers'
+    );
+    const { segmentIntersectsPolygon } = await import('@/lib/geo');
+    const bebouwing = await fetchBebouwingVoorLijn(coordinates.map(([x, y]) => ({ x, y })));
+    let doorsnijdingen = 0;
+    for (const line of lines) {
+      for (let i = 1; i < line.length; i++) {
+        if (
+          bebouwing.some((pand) =>
+            segmentIntersectsPolygon(line[i - 1][0], line[i - 1][1], line[i][0], line[i][1], pand)
+          )
+        ) {
+          doorsnijdingen++;
+        }
+      }
+    }
+    if (doorsnijdingen > 0) {
+      return {
+        ok: false,
+        error: `Niet opgeslagen: tracé doorsnijdt bebouwing op ${doorsnijdingen} segment(en) — verleg de vertex(en) om het pand heen`,
+      };
+    }
+  } catch {
+    // Guard mag opslaan niet blokkeren als de BGT-dienst tijdelijk onbereikbaar is
+  }
+
   const flatCoords = lines.flat();
   const saved = await saveTraceGeometry({
     traceLegacyId,

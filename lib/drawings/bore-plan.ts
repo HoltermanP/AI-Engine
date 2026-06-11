@@ -40,33 +40,31 @@ export function generateBorePlanDrawing(
     ],
     extra: [
       ['Segment', `S${segment.volgorde}`],
-      ['Lengte', `${segment.boorplan.trajectory.booglengteM.toFixed(0)} m boog + ${segment.boorplan.samenvatting.match(/\d+ m/)?.[0] ?? ''}`],
+      ['Lengte', `${segment.boorplan.lengteM.toFixed(0)} m (boogdeel ${segment.boorplan.trajectory.booglengteM.toFixed(0)} m)`],
     ] as [string, string][],
   };
 
   const { pad, drawW, drawH } = tekeningVlak(w, h, meta);
   const c = themeColors(theme);
-  const cx = pad.l + drawW * 0.15;
-  const cy = pad.t + drawH * 0.55;
-  const boreLen = Math.min(drawW * 0.65, segment.boorplan.trajectory.booglengteM * 2.5);
-  const entryX = cx;
-  const exitX = cx + boreLen;
-  const midY = cy;
-  const depthPx = drawH * 0.25;
+  const lengteM = segment.boorplan.lengteM;
+  const entryX = pad.l + drawW * 0.12;
+  const exitX = pad.l + drawW * 0.88;
+  const midY = pad.t + drawH * 0.5;
+  const boreLen = exitX - entryX;
+  // Schaal in px/m zodat putafmetingen en maatvoering onderling kloppen
+  const pxPerM = boreLen / lengteM;
 
-  const borePath = `M ${entryX} ${midY}
-    Q ${entryX + boreLen * 0.25} ${midY + depthPx * 0.3} ${entryX + boreLen * 0.5} ${midY + depthPx}
-    Q ${entryX + boreLen * 0.75} ${midY + depthPx * 0.3} ${exitX} ${midY}`;
+  // In bovenaanzicht volgt het boortraject de tracélijn (diepte bestaat hier niet)
+  const borePath = `M ${entryX} ${midY} L ${exitX} ${midY}`;
 
-  const entryPutW = t.entryPutL * 3;
-  const entryPutH = t.entryPutB * 3;
-  const exitPutW = t.exitPutL * 3;
+  const entryPutW = Math.max(t.entryPutL * pxPerM, 14);
+  const entryPutH = Math.max(t.entryPutB * pxPerM, 8);
+  const exitPutW = Math.max(t.exitPutL * pxPerM, 14);
 
   const content = `
   ${isoTekenkader(pad.l, pad.t, drawW, drawH)}
   ${northArrow(pad.l + 24, pad.t + 24, 22, theme)}
-  <text x="${pad.l + drawW / 2}" y="${pad.t + 12}" text-anchor="middle" fill="${c.subtitel}" font-size="7" font-family="IBM Plex Sans,sans-serif">Schaal</text>
-  <text x="${pad.l + drawW / 2}" y="${pad.t + 12}" text-anchor="middle" fill="${c.subtitel}" font-size="7" font-family="IBM Plex Sans,sans-serif">Schaal 1:500</text>
+  <text x="${pad.l + drawW / 2}" y="${pad.t + 12}" text-anchor="middle" fill="${c.subtitel}" font-size="7" font-family="IBM Plex Sans,sans-serif">Schaal 1:${Math.round(1000 / pxPerM / 10) * 10}</text>
 
   <!-- Startput -->
   <rect x="${entryX - entryPutW / 2}" y="${midY - entryPutH / 2}" width="${entryPutW}" height="${entryPutH}" fill="${TEKENING_KLEUREN.accent}20" stroke="${TEKENING_KLEUREN.accent}" stroke-width="${NLCS_LIJNDIKTE.normaal}"/>
@@ -77,17 +75,19 @@ export function generateBorePlanDrawing(
   <rect x="${exitX - exitPutW / 2}" y="${midY - entryPutH / 2}" width="${exitPutW}" height="${entryPutH}" fill="${TEKENING_KLEUREN.waarschuwing}20" stroke="${TEKENING_KLEUREN.waarschuwing}" stroke-width="${NLCS_LIJNDIKTE.normaal}"/>
   <text x="${exitX}" y="${midY + entryPutH / 2 + 10}" text-anchor="middle" fill="${c.text}" font-size="6" font-family="IBM Plex Mono,monospace">Eindput</text>
 
-  <!-- Boogtraject -->
+  <!-- Boortraject (volgt tracé in bovenaanzicht) -->
   <path d="${borePath}" fill="none" stroke="#E67E22" stroke-width="2.5" stroke-dasharray="6,3"/>
-  <text x="${entryX + boreLen / 2}" y="${midY + depthPx + 14}" text-anchor="middle" fill="#E67E22" font-size="6" font-family="IBM Plex Mono,monospace">Boogtraject R=${t.boogstraalM.toFixed(0)} m</text>
+  <text x="${entryX + boreLen / 2}" y="${midY + 14}" text-anchor="middle" fill="#E67E22" font-size="6" font-family="IBM Plex Mono,monospace">Boortraject R=${t.boogstraalM.toFixed(0)} m · diepte ${t.maxDiepteNap.toFixed(2)} m NAP (zie boorprofiel)</text>
 
   <!-- Tracélijn -->
-  <line x1="${entryX}" y1="${midY - 20}" x2="${exitX}" y2="${midY - 20}" stroke="${trace.kleur}" stroke-width="3"/>
-  <text x="${entryX + boreLen / 2}" y="${midY - 26}" text-anchor="middle" fill="${trace.kleur}" font-size="6" font-family="IBM Plex Sans,sans-serif">Ontwerptracé</text>
+  <line x1="${entryX}" y1="${midY - 14}" x2="${exitX}" y2="${midY - 14}" stroke="${trace.kleur}" stroke-width="3"/>
+  <text x="${entryX + boreLen / 2}" y="${midY - 20}" text-anchor="middle" fill="${trace.kleur}" font-size="6" font-family="IBM Plex Sans,sans-serif">Ontwerptracé</text>
 
   <!-- Maatvoering -->
-  <line x1="${entryX}" y1="${midY + depthPx + 30}" x2="${exitX}" y2="${midY + depthPx + 30}" stroke="${c.border}" stroke-width="0.75"/>
-  <text x="${entryX + boreLen / 2}" y="${midY + depthPx + 40}" text-anchor="middle" fill="${c.text}" font-size="6" font-family="IBM Plex Mono,monospace">Maatvoering ${segment.boorplan.samenvatting.match(/\d+ m/)?.[0] ?? ''}</text>
+  <line x1="${entryX}" y1="${midY + 56}" x2="${exitX}" y2="${midY + 56}" stroke="${c.border}" stroke-width="0.75"/>
+  <line x1="${entryX}" y1="${midY + 52}" x2="${entryX}" y2="${midY + 60}" stroke="${c.border}" stroke-width="0.75"/>
+  <line x1="${exitX}" y1="${midY + 52}" x2="${exitX}" y2="${midY + 60}" stroke="${c.border}" stroke-width="0.75"/>
+  <text x="${entryX + boreLen / 2}" y="${midY + 66}" text-anchor="middle" fill="${c.text}" font-size="6" font-family="IBM Plex Mono,monospace">Maatvoering ${lengteM.toFixed(0)} m</text>
 
   <!-- Legenda -->
   <text x="${pad.l + 8}" y="${pad.t + drawH - 8}" fill="${c.muted}" font-size="5" font-family="IBM Plex Sans,sans-serif">Legenda</text>

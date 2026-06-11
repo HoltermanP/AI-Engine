@@ -55,6 +55,10 @@ export interface BorePlan {
   methode: BoreMethode;
   label: string;
   samenvatting: string;
+  lengteM: number;
+  maaiveldNap: number;
+  grondwaterNap: number;
+  vereisteDekking: number;
   trajectory: BoreTrajectory;
   sonderingRefs: string[];
   risicos: string[];

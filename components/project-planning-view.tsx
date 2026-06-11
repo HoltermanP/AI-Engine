@@ -78,7 +78,7 @@ export function ProjectPlanningView({ projectId }: ProjectPlanningViewProps) {
 
       {planning && (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Card>
               <CardContent className="p-3">
                 <p className="text-[10px] text-muted-foreground">Start</p>

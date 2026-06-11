@@ -33,6 +33,7 @@ export interface MapLibreMap {
     point: { x: number; y: number },
     options?: { layers?: string[] }
   ) => { properties?: Record<string, unknown> }[];
+  setLayerZoomRange: (layerId: string, minzoom: number, maxzoom: number) => void;
   dragPan: { disable: () => void; enable: () => void };
 }
 

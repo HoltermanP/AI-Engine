@@ -33,25 +33,52 @@ export {
 } from './titelblok';
 export { getConfiguredDwgConverter, type DwgConverter } from './dwg-converter';
 
+/** Tekeningfase: bepaalt de set, het titelbloknummer (doc-code) en de status. */
+export type TekeningFase = 'vo' | 'do' | 'uo';
+
+const FASE_SET: Record<TekeningFase, DrawingResult['type'][]> = {
+  // VO: situatie + AVOI-dwarsprofiel (voorkeursligging)
+  vo: ['trace_plan', 'cross_section'],
+  // DO: volledige ontwerpset
+  do: ['trace_plan', 'length_profile', 'cross_section', 'crossing_detail'],
+  // UO/werktekeningen: volledige set met definitieve maatvoering
+  uo: ['trace_plan', 'length_profile', 'cross_section', 'crossing_detail'],
+};
+
+const FASE_PREFIX: Record<TekeningFase, string> = {
+  vo: 'VO',
+  do: 'DO',
+  uo: 'Werktekening',
+};
+
+const FASE_STATUS: Record<TekeningFase, 'concept' | 'in review' | 'definitief'> = {
+  vo: 'concept',
+  do: 'in review',
+  uo: 'definitief',
+};
+
 /**
- * Genereert alle tekeningen voor een tracé en voorziet elke SVG van een
- * NLCS-titelblok. Het optionele `titelblok`-argument overschrijft de
- * defaults (projectnaam/opdrachtgever uit het demoproject, doc-code per
- * tekening); bestaande callers blijven zonder argument werken.
+ * Genereert de tekeningen voor een tracé per ontwerpfase (VO/DO/UO) en
+ * voorziet elke SVG van een NLCS-titelblok met fase-doc-code en status.
+ * Het optionele `titelblok`-argument overschrijft de defaults; bestaande
+ * callers zonder fase krijgen de DO-set.
  */
 export function generateDrawings(
   trace: DemoTrace,
   bestaandNet: DemoBestaandNet[],
-  titelblok?: TitelblokOpts
+  titelblok?: TitelblokOpts,
+  fase: TekeningFase = 'do'
 ): DrawingResult[] {
-  const drawings: DrawingResult[] = [
-    { type: 'trace_plan', label: 'Tracétekening', svg: generateTracePlan(trace, bestaandNet), formaat: 'svg' },
+  const alle: DrawingResult[] = [
+    { type: 'trace_plan', label: 'Situatietekening', svg: generateTracePlan(trace, bestaandNet), formaat: 'svg' },
     { type: 'length_profile', label: 'Lengteprofiel', svg: generateLengthProfile(trace), formaat: 'svg' },
     { type: 'cross_section', label: 'Dwarsprofiel (AVOI)', svg: generateCrossSection(trace), formaat: 'svg' },
     { type: 'crossing_detail', label: 'Kruisingsdetail', svg: generateCrossingDetail(trace), formaat: 'svg' },
   ];
 
-  if (trace.discipline === 'stations') {
+  const drawings = alle.filter((d) => FASE_SET[fase].includes(d.type));
+
+  if (trace.discipline === 'stations' && fase !== 'vo') {
     drawings.push({
       type: 'station',
       label: 'Stationstekening',
@@ -72,16 +99,29 @@ export function generateDrawings(
   const project = projectForTrace(trace);
   return drawings.map((drawing, i) => ({
     ...drawing,
+    label: `${FASE_PREFIX[fase]} — ${drawing.label}`,
     svg: wrapDrawingWithTitelblok(drawing.svg, {
       projectnaam: project.naam,
       opdrachtgever: project.opdrachtgever,
+      status: FASE_STATUS[fase],
       tekeningnummer: formatDocCode({
         projectCode: trace.code,
-        fase: 'do',
+        fase,
         type: 'TEK',
         volgnummer: i + 1,
       }),
       ...titelblok,
     }),
   }));
+}
+
+/** Volledig tekeningenpakket: VO-, DO- en werktekeningen (UO) in één keer. */
+export function generateAlleFaseTekeningen(
+  trace: DemoTrace,
+  bestaandNet: DemoBestaandNet[],
+  titelblok?: TitelblokOpts
+): DrawingResult[] {
+  return (['vo', 'do', 'uo'] as TekeningFase[]).flatMap((fase) =>
+    generateDrawings(trace, bestaandNet, titelblok, fase)
+  );
 }

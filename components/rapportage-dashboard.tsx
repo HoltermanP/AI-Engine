@@ -38,11 +38,6 @@ export function RapportageDashboard({ portfolio, projectRapportages }: Rapportag
   const maandrapportMarkdown = generateMaandrapportMarkdown(portfolio);
   const gegenereerd = new Date(portfolio.gegenereerdOp).toLocaleString('nl-NL');
 
-  const maxTrend = Math.max(
-    ...portfolio.maandTrend.map((m) => m.afgerond + m.open + m.blokkerend),
-    1
-  );
-
   const hoogste = [...portfolio.voortgangPerOpdrachtgever].sort((a, b) => b.voortgang - a.voortgang)[0];
   const risicoProjecten = projectRapportages.filter((p) => p.blokkerendeActies > 0);
 
@@ -158,43 +153,49 @@ export function RapportageDashboard({ portfolio, projectRapportages }: Rapportag
             <CardTitle className="text-sm font-semibold">Maandtrend acties</CardTitle>
             <p className="text-xs text-muted-foreground">Ontwikkeling over de afgelopen 6 maanden</p>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-1">
             {portfolio.maandTrend.map((m) => {
               const totaal = m.afgerond + m.open + m.blokkerend;
-              const pct = (totaal / maxTrend) * 100;
+              const pctAfgerond = totaal > 0 ? Math.round((m.afgerond / totaal) * 100) : 0;
               return (
                 <ClickableBar key={m.maand} href={actiesUrl()} ariaLabel={`Acties in ${m.maand}`}>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="w-10 font-mono font-medium uppercase text-muted-foreground">{m.maand}</span>
-                      <span className="font-mono text-muted-foreground">{totaal} acties</span>
+                  <div className="space-y-1.5 rounded-lg px-2 py-2 transition-colors hover:bg-muted/40">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                      <span className="w-10 shrink-0 font-mono font-semibold uppercase text-foreground">
+                        {m.maand}
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                        <span className="flex items-center gap-1 text-emerald-700">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          <span className="font-mono font-semibold">{m.afgerond}</span> afgerond
+                        </span>
+                        <span className="flex items-center gap-1 text-amber-700">
+                          <span className="h-2 w-2 rounded-full bg-amber-400" />
+                          <span className="font-mono font-semibold">{m.open}</span> open
+                        </span>
+                        <span className={m.blokkerend > 0 ? 'flex items-center gap-1 text-red-600' : 'flex items-center gap-1 text-muted-foreground/60'}>
+                          <span className={m.blokkerend > 0 ? 'h-2 w-2 rounded-full bg-red-500' : 'h-2 w-2 rounded-full bg-slate-300'} />
+                          <span className="font-mono font-semibold">{m.blokkerend}</span> blokkerend
+                        </span>
+                      </span>
+                      <span className="ml-auto shrink-0 font-mono text-[11px] font-semibold text-foreground">
+                        {pctAfgerond}%
+                      </span>
                     </div>
-                    <div className="flex h-7 overflow-hidden rounded-md bg-slate-100" style={{ width: `${Math.max(pct, 12)}%` }}>
+                    {/* Eén maatstaf per balk: aandeel afgeronde acties — zelfde schaal elke maand */}
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                       <div
-                        className="h-full bg-emerald-500 transition-all"
-                        style={{ width: `${(m.afgerond / totaal) * 100}%` }}
-                        title={`Afgerond: ${m.afgerond}`}
-                      />
-                      <div
-                        className="h-full bg-amber-400 transition-all"
-                        style={{ width: `${(m.open / totaal) * 100}%` }}
-                        title={`Open: ${m.open}`}
-                      />
-                      <div
-                        className="h-full bg-red-500 transition-all"
-                        style={{ width: `${(m.blokkerend / totaal) * 100}%` }}
-                        title={`Blokkerend: ${m.blokkerend}`}
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${pctAfgerond}%` }}
                       />
                     </div>
                   </div>
                 </ClickableBar>
               );
             })}
-            <div className="flex flex-wrap gap-4 border-t border-border pt-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Afgerond</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-400" /> Open</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-red-500" /> Blokkerend</span>
-            </div>
+            <p className="border-t border-border pt-2.5 text-[10px] text-muted-foreground">
+              Balk = aandeel afgeronde acties per maand. Aantallen per status staan ernaast.
+            </p>
           </CardContent>
         </Card>
 

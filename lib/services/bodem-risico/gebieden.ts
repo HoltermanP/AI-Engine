@@ -56,6 +56,34 @@ function gebiedLabel(risicoklasse: BodemRisicoklasse, gebiedType: BodemGebiedTyp
   return `${RISICO_LABEL[risicoklasse]} — ${GEBIED_TYPE_LABEL[gebiedType]}`;
 }
 
+/**
+ * Bufferstraal (m) voor puntlocaties per risicoklasse: een verontreinigings-
+ * punt zonder contour wordt als risicovlek getoond. Hogere klasse = grotere
+ * indicatieve onderzoekszone rond de locatie (quickscan-werkwijze).
+ */
+const VLEK_STRAAL_M: Record<BodemRisicoklasse, number> = {
+  zeer_hoog: 50,
+  hoog: 40,
+  middel: 30,
+  laag: 20,
+  beheer: 20,
+  geen: 12,
+  onbekend: 25,
+};
+
+function puntNaarVlek(x: number, y: number, straalM: number): [number, number][] {
+  const punten: [number, number][] = [];
+  const segmenten = 20;
+  for (let i = 0; i <= segmenten; i++) {
+    const hoek = (i / segmenten) * 2 * Math.PI;
+    punten.push([
+      Math.round((x + Math.cos(hoek) * straalM) * 10) / 10,
+      Math.round((y + Math.sin(hoek) * straalM) * 10) / 10,
+    ]);
+  }
+  return punten;
+}
+
 /** Groepeer locaties per risicoklasse + gebiedtype tot analyseerbare gebieden. */
 export function aggregateBodemRisicoGebieden(
   locaties: BodemRisicoLocatie[]
@@ -81,6 +109,8 @@ export function aggregateBodemRisicoGebieden(
         polygons.push(item.polygon);
       } else if (item.x !== undefined && item.y !== undefined) {
         punten.push({ id: item.id, x: item.x, y: item.y });
+        // Puntlocatie zonder contour: toon als risicovlek met indicatieve zone
+        polygons.push(puntNaarVlek(item.x, item.y, VLEK_STRAAL_M[risicoklasse] ?? 25));
       }
     }
 

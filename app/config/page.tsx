@@ -1,5 +1,7 @@
 import { AppShell } from '@/components/app-shell';
 import { ConfigPanel } from '@/components/config-panel';
+import { NetbronnenPanel } from '@/components/netbronnen-panel';
+import { TraceLeerPanel } from '@/components/trace-leer-panel';
 import { PageContainer } from '@/components/page-container';
 import { PageHero } from '@/components/page-hero';
 import { getConnectorStatuses } from '@/lib/connectors/registry';
@@ -27,6 +29,8 @@ export default function ConfigPage() {
           }
         />
         <ConfigPanel connectors={connectors} envStatus={envStatus} />
+        <NetbronnenPanel />
+        <TraceLeerPanel />
       </PageContainer>
     </AppShell>
   );

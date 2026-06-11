@@ -2,8 +2,14 @@ const ORIGIN_X = -285401.92;
 const ORIGIN_Y = 903401.92;
 const TILE_SIZE = 256;
 const BASE_SCALE = 12_288_000;
-const PDOK_TOPO_TEMPLATE =
+// BGT-visualisatie: exacte pandcontouren (BRT generaliseert bebouwing en is
+// daarmee misleidend naast een ontwerptracé). PDOK rendert BGT pas vanaf
+// RD-level 12 — daaronder valt de tekening terug op BRT.
+const PDOK_BGT_TEMPLATE =
+  'https://service.pdok.nl/lv/bgt/wmts/v1_0/standaardvisualisatie/EPSG:28992';
+const PDOK_BRT_TEMPLATE =
   'https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:28992';
+const BGT_MIN_LEVEL = 12;
 
 export interface RdBbox {
   minX: number;
@@ -82,14 +88,15 @@ export function topoBackgroundSvg(
       const y = ty(tb.maxY);
       const w = tx(tb.maxX) - x;
       const h = ty(tb.minY) - y;
-      const href = `${PDOK_TOPO_TEMPLATE}/${String(level).padStart(2, '0')}/${col}/${row}.png`;
+      const template = level >= BGT_MIN_LEVEL ? PDOK_BGT_TEMPLATE : PDOK_BRT_TEMPLATE;
+      const href = `${template}/${String(level).padStart(2, '0')}/${col}/${row}.png`;
       tiles.push(
         `<image href="${href}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" preserveAspectRatio="none"/>`
       );
     }
   }
 
-  return `<!-- Achtergrond: BRT PDOK topo -->
+  return `<!-- Achtergrond: ${level >= BGT_MIN_LEVEL ? 'BGT PDOK (exacte pandcontouren)' : 'BRT PDOK topo'} -->
   <defs>
     <clipPath id="${clip.id}">
       <rect x="${clip.x}" y="${clip.y}" width="${clip.w}" height="${clip.h}"/>

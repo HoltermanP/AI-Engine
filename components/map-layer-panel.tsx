@@ -16,9 +16,11 @@ export interface LayerToggle {
   loading?: boolean;
 }
 
-export type BasemapId = 'brt' | 'osm' | 'luchtfoto';
+export type BasemapId = 'bgt' | 'brt' | 'osm' | 'luchtfoto';
 
 export const BASEMAP_OPTIONS: Record<BasemapId, string> = {
+  // BGT toont exacte pandcontouren — standaard, want BRT generaliseert bebouwing
+  bgt: 'BGT (exact)',
   brt: 'BRT PDOK',
   osm: 'OpenStreetMap',
   luchtfoto: 'Luchtfoto',

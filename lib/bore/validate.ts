@@ -40,9 +40,14 @@ for (const trace of boreTraces) {
   }
 
   const tekeningen = generateBoreDrawings(trace, result);
+  // Boorplan + boorprofiel per segment; HDD/persing krijgt ook een booropstellingtekening
+  const verwacht = result.segmenten.reduce(
+    (n, s) => n + 2 + (s.methode === 'hdd' || s.methode === 'persing' ? 1 : 0),
+    0
+  );
   assert(
-    `${trace.code}: ${tekeningen.length} tekeningen`,
-    tekeningen.length === result.segmenten.length * 2,
+    `${trace.code}: ${tekeningen.length} tekeningen (verwacht ${verwacht})`,
+    tekeningen.length === verwacht,
   );
 }
 

@@ -80,6 +80,7 @@ export function TraceFase1Panel({
           thema: n.thema,
           beheerder: n.beheerder,
           coordinates: n.coordinates,
+          vrijTeHoudenAfstand: n.vrijTeHoudenAfstand,
         })),
         useAi: true,
       });
@@ -185,7 +186,7 @@ export function TraceFase1Panel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden lg:flex-row">
-      <div className="w-full shrink-0 overflow-auto border-b border-border bg-card p-4 lg:w-80 lg:border-b-0 lg:border-r">
+      <div className="max-h-[45dvh] w-full shrink-0 overflow-auto border-b border-border bg-card p-4 lg:max-h-none lg:w-80 lg:border-b-0 lg:border-r">
         <AutoTracePanel
           waypoints={autoWaypoints}
           onClearWaypoints={() => {
@@ -213,57 +214,43 @@ export function TraceFase1Panel({
           anthropicConfigured={anthropicConfigured}
         />
 
-        <Card className="mb-3 mt-3">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-sm">Tracéontwerp</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-1 font-mono text-xs">
+        {/* Naslaginformatie ingeklapt — de stappenwijzer hierboven is het werk */}
+        <details className="group mt-3 mb-3 rounded-lg border border-border bg-card">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <span className="inline-block transition-transform group-open:rotate-90">›</span>{' '}
+            Ontwerpgegevens · {DISCIPLINE_LABELS[trace.discipline]} ·{' '}
+            {traceLengthM(activeTrace?.coordinates ?? trace.coordinates, activeTrace?.traceLines ?? trace.traceLines)}{' '}
+            m
+          </summary>
+          <div className="space-y-1.5 border-t border-border/60 p-3 font-mono text-xs">
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Code</span>
               <span className="text-foreground">{trace.code}</span>
-            </div>
-            <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Discipline</span>
-              <span className="text-foreground">{DISCIPLINE_LABELS[trace.discipline]}</span>
             </div>
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Nettype</span>
               <span className="text-foreground">{trace.netType}</span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Lengte</span>
-              <span className="text-foreground">
-                {traceLengthM(activeTrace?.coordinates ?? trace.coordinates, activeTrace?.traceLines ?? trace.traceLines)} m
-              </span>
-            </div>
-            <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Dekking</span>
               <span className="text-foreground">{trace.vereisteDekking} m</span>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mb-3">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-sm">Locatie</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-1 text-xs">
-            <div>
-              <p className="text-muted-foreground">Weg / corridor</p>
-              <p className="text-foreground">{trace.wegnaam}</p>
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Weg / corridor</span>
+              <span className="text-foreground">{trace.wegnaam}</span>
             </div>
-            <div>
-              <p className="text-muted-foreground">Leglocatie</p>
-              <p className="text-foreground">{trace.leglocatie}</p>
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Leglocatie</span>
+              <span className="text-foreground">{trace.leglocatie}</span>
             </div>
             {start && end && (
-              <div className="font-mono text-[10px] text-muted-foreground">
+              <div className="pt-1 text-[10px] text-muted-foreground">
                 <p>RD start: {start[0].toFixed(1)}, {start[1].toFixed(1)}</p>
                 <p>RD eind: {end[0].toFixed(1)}, {end[1].toFixed(1)}</p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </details>
 
         {activeSegments.length > 0 && (
           <Card>
@@ -286,7 +273,7 @@ export function TraceFase1Panel({
         )}
       </div>
 
-      <div className="min-h-[400px] flex-1">
+      <div className="min-h-[280px] min-w-0 flex-1 lg:min-h-0">
         <MapWorkspace
           traces={mapTraces}
           onTracesChange={onMapTracesChange}

@@ -305,7 +305,7 @@ function onSegment(a: [number, number], b: [number, number], c: [number, number]
   );
 }
 
-function segmentsIntersect(
+export function segmentsIntersect(
   a1: [number, number],
   a2: [number, number],
   b1: [number, number],
@@ -537,6 +537,29 @@ export function sustainedParallelViolation(
   }
 
   return bestViolation;
+}
+
+/**
+ * Echte segment-polygoon-intersectie: binnenliggende eindpunten/middelpunt
+ * óf een snijpunt met een polygoonrand. Vangt ook segmenten die alleen een
+ * hoek van het polygoon doorsnijden (waar puntchecks falen).
+ */
+export function segmentIntersectsPolygon(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  polygon: [number, number][]
+): boolean {
+  if (polygon.length < 3) return false;
+  if (pointInPolygon(ax, ay, polygon) || pointInPolygon(bx, by, polygon)) return true;
+  if (pointInPolygon((ax + bx) / 2, (ay + by) / 2, polygon)) return true;
+  const a1: [number, number] = [ax, ay];
+  const a2: [number, number] = [bx, by];
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    if (segmentsIntersect(a1, a2, polygon[j], polygon[i])) return true;
+  }
+  return false;
 }
 
 export function pointInPolygon(

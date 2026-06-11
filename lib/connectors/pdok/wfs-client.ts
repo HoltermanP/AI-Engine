@@ -2,6 +2,9 @@ import type { BboxQuery } from '../types';
 
 const WFS_BASE = 'https://service.pdok.nl';
 
+/** Harde timeout per request — een hangende geodienst mag de berekening nooit blokkeren. */
+const PDOK_TIMEOUT_MS = 15_000;
+
 export function bboxParam(bbox: BboxQuery): string {
   return `${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY},urn:ogc:def:crs:EPSG::28992`;
 }
@@ -24,6 +27,7 @@ export async function fetchPdokWfs(
   const res = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },
     cache: 'no-store',
+    signal: AbortSignal.timeout(PDOK_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -71,6 +75,7 @@ export async function fetchPdokWfsPaged(
     const res = await fetch(url.toString(), {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(PDOK_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -101,7 +106,10 @@ export async function fetchAhnElevation(x: number, y: number): Promise<number | 
   url.searchParams.set('HEIGHT', '1');
   url.searchParams.set('FORMAT', 'image/tiff');
 
-  const res = await fetch(url.toString(), { next: { revalidate: 86400 } });
+  const res = await fetch(url.toString(), {
+    next: { revalidate: 86400 },
+    signal: AbortSignal.timeout(PDOK_TIMEOUT_MS),
+  });
   if (!res.ok) return null;
 
   const buffer = await res.arrayBuffer();

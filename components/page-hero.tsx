@@ -40,7 +40,7 @@ export function PageHero({
   return (
     <section
       className={cn(
-        'relative overflow-hidden rounded-2xl px-6 py-7 sm:px-8 sm:py-8',
+        'relative overflow-hidden rounded-2xl px-4 py-5 sm:px-8 sm:py-8',
         isDark
           ? 'border border-[#2D6FE8]/25 bg-gradient-to-br from-[#0D1428] via-[#152040] to-[#1e3a7a] text-white shadow-[var(--shadow-lift)]'
           : 'hero-banner border border-[#2D6FE8]/15',
@@ -63,8 +63,8 @@ export function PageHero({
         <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjA2KSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-60" />
       )}
 
-      <div className="relative flex flex-wrap items-start justify-between gap-6">
-        <div className="max-w-2xl space-y-2">
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0 max-w-2xl space-y-2">
           {backLink && (
             <Link
               href={backLink.href}

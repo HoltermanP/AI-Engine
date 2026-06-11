@@ -6,6 +6,7 @@ import {
   anthropicComplete,
   anthropicCompleteStream,
   isAnthropicConfigured,
+  ANTHROPIC_NIET_GECONFIGUREERD,
   type AnthropicCompletionOptions,
 } from '@/lib/connectors/ai/anthropic';
 import type { CollectedTraceData } from '@/lib/services/collect-trace-data';
@@ -194,17 +195,6 @@ ${document.inhoud}
   return { system, prompt, maxTokens: 8192 };
 }
 
-async function* simuleerTekstStream(
-  tekst: string,
-  chunkSize = 48,
-  delayMs = 12
-): AsyncGenerator<string> {
-  for (let i = 0; i < tekst.length; i += chunkSize) {
-    yield tekst.slice(i, i + chunkSize);
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
-}
-
 export type RapportStreamEvent =
   | { event: 'template'; document: OnderzoekDocument }
   | { event: 'delta'; text: string }
@@ -225,15 +215,7 @@ export async function* streamVerrijkRapportMetAnthropic(
   yield { event: 'template', document: templateDoc };
 
   if (!isAnthropicConfigured()) {
-    let accumulated = '';
-    for await (const chunk of simuleerTekstStream(document.inhoud)) {
-      accumulated += chunk;
-      yield { event: 'delta', text: chunk };
-    }
-    yield {
-      event: 'done',
-      document: { ...document, inhoud: accumulated, status: 'afgerond', _source: 'demo' },
-    };
+    yield { event: 'error', message: ANTHROPIC_NIET_GECONFIGUREERD };
     return;
   }
 
@@ -247,7 +229,11 @@ export async function* streamVerrijkRapportMetAnthropic(
     }
 
     if (!valideerMarkdownRapport(accumulated, document.inhoud)) {
-      yield { event: 'done', document: { ...document, status: 'afgerond' } };
+      yield {
+        event: 'error',
+        message:
+          'Het AI-rapport voldeed niet aan de kwaliteitsvalidatie (te kort of onvolledige structuur). Start het onderzoek opnieuw.',
+      };
       return;
     }
 
@@ -266,7 +252,6 @@ export async function* streamVerrijkRapportMetAnthropic(
       event: 'error',
       message: err instanceof Error ? err.message : 'AI-stream mislukt',
     };
-    yield { event: 'done', document: { ...document, status: 'afgerond' } };
   }
 }
 
@@ -277,27 +262,23 @@ export async function verrijkRapportMetAnthropic(
   conflicten?: DetectedConflict[]
 ): Promise<OnderzoekDocument> {
   if (!isAnthropicConfigured()) {
-    return document;
+    throw new Error(ANTHROPIC_NIET_GECONFIGUREERD);
   }
 
   const prompts = bouwRapportPrompts(document, trace, collected, conflicten);
+  const result = await anthropicComplete(prompts);
 
-  try {
-    const result = await anthropicComplete(prompts);
-
-    if (result._source !== 'live' || !valideerMarkdownRapport(result.text, document.inhoud)) {
-      return document;
-    }
-
-    return {
-      ...document,
-      inhoud: result.text.trim(),
-      _source: 'live',
-    };
-  } catch (err) {
-    console.error(`[ai-rapport] Anthropic mislukt voor ${document.type}:`, err);
-    return document;
+  if (!valideerMarkdownRapport(result.text, document.inhoud)) {
+    throw new Error(
+      `AI-rapport voor ${document.type} voldeed niet aan de kwaliteitsvalidatie — probeer opnieuw.`
+    );
   }
+
+  return {
+    ...document,
+    inhoud: result.text.trim(),
+    _source: 'live',
+  };
 }
 
 export async function bewerkRapportMetAnthropic(
@@ -305,12 +286,14 @@ export async function bewerkRapportMetAnthropic(
   instructie: string,
   context: string,
   rapportType: OnderzoekType
-): Promise<{ inhoud: string; _source: 'live' | 'demo' }> {
+): Promise<{ inhoud: string; _source: 'live' }> {
   if (!isAnthropicConfigured()) {
-    return { inhoud: huidigeInhoud, _source: 'demo' };
+    throw new Error(ANTHROPIC_NIET_GECONFIGUREERD);
   }
 
   const result = await anthropicComplete({
+    // Interactieve bewerking: snel model zodat opmerkingen direct verwerkt worden
+    model: 'claude-haiku-4-5-20251001',
     system: `Je bent een Nederlandse engineering-rapporteur. Pas rapporten aan in Markdown. Geef ALLEEN het volledige aangepaste rapport terug.`,
     prompt: `Rapporttype: ${rapportType}
 Context: ${context}
@@ -322,8 +305,8 @@ ${huidigeInhoud}`,
     maxTokens: 8192,
   });
 
-  if (result._source === 'live' && valideerMarkdownRapport(result.text, huidigeInhoud)) {
-    return { inhoud: result.text.trim(), _source: 'live' };
+  if (!valideerMarkdownRapport(result.text, huidigeInhoud)) {
+    throw new Error('AI-bewerking voldeed niet aan de kwaliteitsvalidatie — probeer opnieuw.');
   }
-  return { inhoud: huidigeInhoud, _source: 'demo' };
+  return { inhoud: result.text.trim(), _source: 'live' };
 }

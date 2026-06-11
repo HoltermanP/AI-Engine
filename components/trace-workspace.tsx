@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ActionContextBanner } from '@/components/action-context-banner';
-import { TracePhaseNav, TracePhaseHeader, TracePhaseNextButton } from '@/components/trace-phase-nav';
-import { ProjectProcessNav } from '@/components/project-process-nav';
+import { TracePhaseNav, TracePhaseNextButton } from '@/components/trace-phase-nav';
 import { TraceFase1Panel } from '@/components/trace-fase1-panel';
 import { TraceFase2Panel } from '@/components/trace-fase2-panel';
 import { TraceEngineeringPanel } from '@/components/trace-engineering-panel';
@@ -26,6 +25,7 @@ import type { DemoBestaandNet } from '@/demo/klic';
 import type { ProjectAction } from '@/demo/project-actions';
 import type { MapTrace } from '@/components/trace-map';
 import { demoTraceToMapTrace, normalizeTraceCoordinates } from '@/lib/trace-edit';
+import { saveManualTraceAction } from '@/lib/actions/trace-routing';
 
 interface TraceWorkspaceProps {
   projectId: string;
@@ -85,6 +85,7 @@ export function TraceWorkspace({
         thema: n.thema,
         beheerder: n.beheerder,
         coordinates: n.coordinates,
+        vrijTeHoudenAfstand: n.vrijTeHoudenAfstand,
       })),
     [collected?.bestaandNet, initialBestaandNet]
   );
@@ -123,6 +124,9 @@ export function TraceWorkspace({
     setToetsStatus(status);
   }
 
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autosaveMelding, setAutosaveMelding] = useState<string | null>(null);
+
   const handleMapTracesChange = useCallback(
     (traces: MapTrace[]) => {
       const prevActive = mapTracesRef.current.find((t) => t.id === trace.id);
@@ -136,10 +140,29 @@ export function TraceWorkspace({
         if (prevFp !== nextFp) {
           setToetsStatus('open');
           setConflicten([]);
+
+          // Direct opslaan na vertex-bewerking (debounce zodat slepen niet per pixel opslaat)
+          if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+          setAutosaveMelding('Wijziging wordt opgeslagen…');
+          autosaveTimer.current = setTimeout(async () => {
+            const lines = (nextActive.traceLines ?? [nextActive.coordinates]).filter(
+              (l) => l.length >= 2
+            );
+            const result = await saveManualTraceAction(
+              trace.id,
+              normalizeTraceCoordinates(nextActive.coordinates),
+              lines.map((l) => normalizeTraceCoordinates(l)),
+              trace.wegnaam
+            );
+            setAutosaveMelding(
+              result.ok ? 'Tracéwijziging opgeslagen' : `Opslaan mislukt: ${result.error}`
+            );
+            setTimeout(() => setAutosaveMelding(null), 4000);
+          }, 1200);
         }
       }
     },
-    [trace.id]
+    [trace.id, trace.wegnaam]
   );
 
   const getActiveTraceCoordinates = useCallback((): [number, number, number][] => {
@@ -224,20 +247,16 @@ export function TraceWorkspace({
   const engineeringPhase = isEngineeringPhase ? activePhase : 'fase3';
 
   return (
-        <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
-        <div className="shrink-0 space-y-2 border-b border-border/60 bg-white/60 px-4 py-2 backdrop-blur-sm">
-          <ProjectProcessNav projectId={projectId} firstTraceId={trace.id} compact />
-        </div>
-
-        <div className="workspace-header flex items-center gap-3">
+        <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden">
+        <div className="workspace-header flex min-w-0 items-center gap-2 sm:gap-3">
           <Link
             href={`/project/${projectId}`}
-            className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-[#2D6FE8]/10 hover:text-[#2D6FE8]"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-[#2D6FE8]/10 hover:text-[#2D6FE8]"
           >
             <ChevronLeft className="h-3 w-3" />
             Project
           </Link>
-          <div className="flex items-center gap-2 rounded-full bg-white px-3 py-1 ring-1 ring-border/60">
+          <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-full bg-white px-3 py-1 ring-1 ring-border/60">
             <span
               className="inline-block h-3 w-3 rounded-full ring-2 ring-white"
               style={{ backgroundColor: trace.kleur }}
@@ -247,7 +266,14 @@ export function TraceWorkspace({
             </h1>
             <SourceBadge source="live" />
           </div>
-          <p className="hidden text-sm text-muted-foreground sm:block">{trace.naam}</p>
+          <p className="hidden min-w-0 truncate text-sm text-muted-foreground sm:block">
+            {trace.naam}
+          </p>
+          {autosaveMelding && (
+            <span className="ml-auto shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
+              {autosaveMelding}
+            </span>
+          )}
         </div>
 
         {linkedAction && showActionBanner && linkedAction.status !== 'afgerond' && (
@@ -259,8 +285,6 @@ export function TraceWorkspace({
           onPhaseChange={setActivePhase}
           phaseStatuses={phaseStatuses}
         />
-
-        <TracePhaseHeader phase={activePhase} />
 
         <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
           {activePhase === 'fase1' && (

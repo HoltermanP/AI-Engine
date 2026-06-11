@@ -71,21 +71,21 @@ export function ProjectFaseOverzicht({ records, className }: ProjectFaseOverzich
   return (
     <Card className={cn('surface-card gap-0 py-0', className)}>
       <CardContent className="p-3">
-        {/* Fase-stepper: verticaal op smalle schermen, horizontaal vanaf sm */}
+        {/* Fase-stepper: horizontaal scrollbaar; labels van niet-actieve fasen vanaf md */}
         <ol
           aria-label="Projectfasen"
-          className="flex flex-col gap-1 sm:flex-row sm:items-stretch sm:gap-0 sm:overflow-x-auto"
+          className="flex items-center gap-1 overflow-x-auto [scrollbar-width:thin]"
         >
           {PROJECT_FASEN.map((fase, index) => {
             const actief = fase.id === actieveFase;
             const afgerond = isAfgerond(fase.id);
             return (
-              <li key={fase.id} className="flex min-w-0 items-center sm:flex-1">
+              <li key={fase.id} className="flex min-w-0 shrink-0 items-center md:flex-1">
                 {index > 0 && (
-                  <div className="mx-1 hidden min-w-[1rem] flex-1 items-center sm:flex">
+                  <div className="mx-1 flex min-w-[0.75rem] flex-1 items-center">
                     <div
                       className={cn(
-                        'h-0.5 w-full rounded-full transition-colors',
+                        'h-0.5 w-full min-w-[0.75rem] rounded-full transition-colors',
                         afgerond || isAfgerond(PROJECT_FASEN[index - 1].id)
                           ? 'bg-emerald-400'
                           : 'bg-border'
@@ -95,12 +95,12 @@ export function ProjectFaseOverzicht({ records, className }: ProjectFaseOverzich
                 )}
                 <div
                   className={cn(
-                    'flex min-h-10 w-full shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 sm:w-auto',
+                    'flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-2 py-1.5',
                     actief && 'bg-[#2D6FE8]/10 ring-1 ring-[#2D6FE8]/30'
                   )}
                 >
                   <FaseIndicator nummer={fase.nummer} afgerond={afgerond} actief={actief} />
-                  <div className="min-w-0">
+                  <div className={cn('min-w-0', !actief && 'hidden md:block')}>
                     <p
                       className={cn(
                         'truncate text-xs font-medium leading-tight',

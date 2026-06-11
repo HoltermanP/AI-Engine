@@ -135,6 +135,23 @@ export function TraceEngineeringPanel({
     });
   }
 
+  // Auto-start: zodra de toets gereed is en er nog geen berekeningen zijn,
+  // start fase 3 de normberekeningen vanzelf — geen overbodige klik
+  const [autoBerekend, setAutoBerekend] = useState(false);
+  useEffect(() => {
+    if (
+      phase === 'fase3' &&
+      toetsVoltooid &&
+      berekeningen.length === 0 &&
+      !autoBerekend &&
+      !isPending
+    ) {
+      setAutoBerekend(true);
+      handleBerekeningen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, toetsVoltooid, berekeningen.length, autoBerekend, isPending]);
+
   function handleTekeningen() {
     startTransition(async () => {
       updateStep('tekenen', 'bezig');
@@ -262,7 +279,7 @@ export function TraceEngineeringPanel({
     return (
       <div className="flex h-full flex-col overflow-auto">
         <div className="border-b border-border bg-card px-4 py-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-medium text-foreground">Engineering-berekeningen</p>
               <p className="text-xs text-muted-foreground">Discipline-specifieke berekeningen conform norm</p>
@@ -324,7 +341,7 @@ export function TraceEngineeringPanel({
   if (phase === 'fase4') {
     return (
       <div className="flex h-full flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-2">
           <p className="text-xs text-muted-foreground">
             OMO/OMA · Conditionerende onderzoeken (Anthropic) · Aanvragen · AI-assistent
           </p>
@@ -413,7 +430,7 @@ export function TraceEngineeringPanel({
     berekeningen.length + tekeningen.length + onderzoeken.length + aanvragen.length + (aiText ? 1 : 0);
 
   return (
-    <div className="flex h-full flex-col overflow-auto p-6">
+    <div className="flex h-full flex-col overflow-auto p-4 sm:p-6">
       <div className="mx-auto w-full max-w-2xl space-y-6">
         <div className="text-center">
           <FolderOpen className="mx-auto h-10 w-10 text-[#2D6FE8]" />
@@ -476,7 +493,17 @@ export function TraceEngineeringPanel({
         {onderzoeken.length > 0 && (
           <div className="min-h-[400px]">
             <p className="mb-2 text-sm font-medium text-foreground">Rapporten in dossier</p>
-            <ReportViewer rapporten={onderzoeken} savedTypes={savedOnderzoekTypes} />
+            <ReportViewer
+              rapporten={onderzoeken}
+              savedTypes={savedOnderzoekTypes}
+              projectId={projectId}
+              traceId={traceId}
+              onRapportChange={(rapport) =>
+                setOnderzoeken((prev) =>
+                  prev.map((o) => (o.type === rapport.type ? rapport : o))
+                )
+              }
+            />
           </div>
         )}
       </div>

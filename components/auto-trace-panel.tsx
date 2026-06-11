@@ -105,29 +105,68 @@ export function AutoTracePanel({
     [result?.alternatieven]
   );
 
+  const stap1Klaar = waypoints.length >= 2;
+  const stap2Klaar = Boolean(result && activeAlt);
+  const stap3Klaar = Boolean(saveMessage && !saveMessage.startsWith('Fout'));
+
+  function StapIndicator({ nummer, klaar, actief }: { nummer: number; klaar: boolean; actief: boolean }) {
+    if (klaar) {
+      return (
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+          <Check className="h-3 w-3" strokeWidth={3} />
+        </span>
+      );
+    }
+    return (
+      <span
+        className={cn(
+          'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+          actief ? 'bg-[#2D6FE8] text-white' : 'bg-muted text-muted-foreground ring-1 ring-border'
+        )}
+      >
+        {nummer}
+      </span>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <Card>
         <CardHeader className="p-3 pb-1">
           <CardTitle className="flex items-center gap-1.5 text-sm">
             <Wand2 className="h-3.5 w-3.5 text-[#2D6FE8]" />
-            Automatische tracebepaling
+            Tracé bepalen
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 p-3 pt-1 text-xs">
-          <p className="text-muted-foreground">
-            Klik minimaal 2 punten op de kaart. Bij berekenen worden PDOK NWB- en BGT-wegen
-            voor dit gebied opgehaald — het tracé volgt het wegennet op de achtergrondkaart.
-          </p>
+          {/* Stappenwijzer met live status — het proces leidt */}
+          <ol className="space-y-1.5">
+            <li className="flex items-center gap-2">
+              <StapIndicator nummer={1} klaar={stap1Klaar} actief={!stap1Klaar} />
+              <span className={cn(stap1Klaar ? 'text-muted-foreground' : 'font-medium text-foreground')}>
+                Klik start- en eindpunt op de kaart
+              </span>
+              {waypoints.length > 0 && (
+                <Badge variant="outline" className="ml-auto font-mono text-[10px]">
+                  {waypoints.length} {waypoints.length === 1 ? 'punt' : 'punten'}
+                </Badge>
+              )}
+            </li>
+            <li className="flex items-center gap-2">
+              <StapIndicator nummer={2} klaar={stap2Klaar} actief={stap1Klaar && !stap2Klaar} />
+              <span className={cn(stap2Klaar ? 'text-muted-foreground' : stap1Klaar ? 'font-medium text-foreground' : 'text-muted-foreground')}>
+                Bereken het tracé langs het wegennet
+              </span>
+            </li>
+            <li className="flex items-center gap-2">
+              <StapIndicator nummer={3} klaar={stap3Klaar} actief={stap2Klaar && !stap3Klaar} />
+              <span className={cn(stap3Klaar ? 'text-muted-foreground' : stap2Klaar ? 'font-medium text-foreground' : 'text-muted-foreground')}>
+                Kies een alternatief en sla op
+              </span>
+            </li>
+          </ol>
 
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Waypoints</span>
-            <Badge variant="outline" className="font-mono text-[10px]">
-              {waypoints.length}
-            </Badge>
-          </div>
-
-          {waypoints.length > 0 && (
+          {waypoints.length > 0 && !stap2Klaar && (
             <ul className="max-h-28 space-y-1 overflow-auto">
               {waypoints.map((wp, i) => (
                 <li

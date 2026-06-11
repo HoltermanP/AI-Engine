@@ -1,12 +1,14 @@
 import type { Discipline } from '@/lib/db/types';
+import { pointInPolygon } from '@/lib/geo';
 import { getAvoiForGemeente, type GemeenteAvoi } from '@/demo/avoi';
 import { getGebiedProfiel } from '@/demo/reports/context';
 import { DEMO_WEGEN } from '@/demo/roads';
 import { DEMO_BELEMMERINGEN } from '@/demo/pdok';
 import { DEMO_PERCELEN } from '@/demo/pdok';
 import type { MapLayerData } from '@/components/trace-map';
-import type { RoutingContext, TraceRoutingInput, TraceWaypoint } from './types';
+import type { RisicoZone, RoutingContext, TraceRoutingInput, TraceWaypoint } from './types';
 import { centerlineFromPolygon } from '@/lib/services/layer-derivation';
+import { getDemoReferentieTraces } from '@/lib/db/demo-store';
 
 const PUBLIEKE_PERCEEL_PREFIXEN = ['G-', 'NOP-G-', 'GEM-', 'WAT-'];
 
@@ -22,6 +24,22 @@ function polygonFromGeometry(geom: GeoJSON.Geometry): [number, number][] | null 
 
 function lineFromCoords(coords: [number, number][]): [number, number][] {
   return coords.filter((c) => Number.isFinite(c[0]) && Number.isFinite(c[1]));
+}
+
+/** NWB-wegbeheerdersoort (R/P/G/W) naar herkenbaar wegtype voor kosten en kruisingstechniek */
+function nwbWegtype(raw: string | undefined): string {
+  switch ((raw ?? '').trim().toUpperCase()) {
+    case 'R':
+      return 'rijksweg';
+    case 'P':
+      return 'provincialeweg';
+    case 'W':
+      return 'waterschapsweg';
+    case 'G':
+      return 'gemeenteweg';
+    default:
+      return raw || 'weg';
+  }
 }
 
 function isPubliekPerceel(perceelnummer: string): boolean {
@@ -129,7 +147,7 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
     roadCenterlines.push({
       id: key,
       naam: weg.naam,
-      type: weg.type || 'weg',
+      type: nwbWegtype(weg.type),
       centerline,
     });
   }
@@ -184,11 +202,50 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
     }
   }
 
+  // Publiek/privaat-proxy voor live BRK-percelen: eigenaarschap is geen open
+  // data, maar een perceel waar een wegcenterline doorheen loopt is vrijwel
+  // altijd openbare ruimte (gemeente/provincie/waterschap). Wegpunten in een
+  // grid zodat de toets per perceel alleen nabije punten raakt.
+  const wegpuntGrid = new Map<string, [number, number][]>();
+  const WEGPUNT_CEL = 100;
+  for (const road of roadCenterlines) {
+    for (const [x, y] of road.centerline) {
+      const key = `${Math.floor(x / WEGPUNT_CEL)}:${Math.floor(y / WEGPUNT_CEL)}`;
+      const cell = wegpuntGrid.get(key) ?? [];
+      cell.push([x, y]);
+      wegpuntGrid.set(key, cell);
+    }
+  }
+
+  function bevatWeg(polygon: [number, number][]): boolean {
+    if (polygon.length < 3) return false;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of polygon) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    for (let cx = Math.floor(minX / WEGPUNT_CEL); cx <= Math.floor(maxX / WEGPUNT_CEL); cx++) {
+      for (let cy = Math.floor(minY / WEGPUNT_CEL); cy <= Math.floor(maxY / WEGPUNT_CEL); cy++) {
+        for (const [x, y] of wegpuntGrid.get(`${cx}:${cy}`) ?? []) {
+          if (x >= minX && x <= maxX && y >= minY && y <= maxY && pointInPolygon(x, y, polygon)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   const percelenFromLayer = (layerData?.percelen ?? []).map((p) => ({
     id: p.id,
     perceelnummer: p.perceelnummer,
     polygon: p.polygon,
-    publiek: isPubliekPerceel(p.perceelnummer),
+    publiek: isPubliekPerceel(p.perceelnummer) || bevatWeg(p.polygon),
   }));
 
   const percelen =
@@ -204,7 +261,64 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
   const watergangen = (layerData?.watergangen ?? []).map((w) => ({
     naam: w.naam,
     coordinates: lineFromCoords(w.coordinates),
+    breedteM: w.breedteM,
   }));
+
+  const bomen = (layerData?.bomen ?? [])
+    .filter(
+      (b) =>
+        Number.isFinite(b.x) &&
+        Number.isFinite(b.y) &&
+        (!searchBbox ||
+          (b.x >= searchBbox.minX - 25 &&
+            b.x <= searchBbox.maxX + 25 &&
+            b.y >= searchBbox.minY - 25 &&
+            b.y <= searchBbox.maxY + 25))
+    )
+    .map((b) => ({ x: b.x, y: b.y }));
+
+  // Risicozones uit de datalagen: vermijden waar mogelijk, anders gemotiveerd afwijken
+  const risicoZones: RisicoZone[] = [];
+
+  for (const gebied of layerData?.natura2000 ?? []) {
+    if (gebied.polygon.length < 4) continue;
+    risicoZones.push({
+      type: 'natura2000',
+      naam: gebied.naam,
+      polygon: gebied.polygon,
+      ernst: 'hoog',
+      maatregel: 'Wnb-toets en AERIUS-berekening; werken buiten broedseizoen (flora & fauna)',
+    });
+  }
+
+  function vlekRond(x: number, y: number, straalM: number): [number, number][] {
+    const ring: [number, number][] = [];
+    for (let i = 0; i <= 16; i++) {
+      const hoek = (i / 16) * 2 * Math.PI;
+      ring.push([x + Math.cos(hoek) * straalM, y + Math.sin(hoek) * straalM]);
+    }
+    return ring;
+  }
+
+  for (const loc of layerData?.vervuildeGrond ?? []) {
+    const polygon =
+      loc.polygon && loc.polygon.length >= 4
+        ? loc.polygon
+        : loc.x !== undefined && loc.y !== undefined
+          ? vlekRond(loc.x, loc.y, 30)
+          : null;
+    if (!polygon) continue;
+    const klasse = (loc.risicoklasse ?? '').toLowerCase();
+    const ernst: RisicoZone['ernst'] =
+      klasse.includes('hoog') ? 'hoog' : klasse.includes('laag') ? 'laag' : 'middel';
+    risicoZones.push({
+      type: 'bodem',
+      naam: loc.naam || 'Verontreinigingslocatie',
+      polygon,
+      ernst,
+      maatregel: 'Verkennend bodemonderzoek (NEN 5740); veiligheidsklasse CROW 400',
+    });
+  }
 
   const belemmeringenRaw = layerData?.belemmeringen ?? DEMO_BELEMMERINGEN;
   const belemmeringen = belemmeringenRaw
@@ -223,7 +337,11 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
     vereisteDekking,
     offsetM: ontwerp.offsetM,
     diepteNap: defaultDiepteNap(discipline),
-    normReferenties: normReferentiesVoorDiscipline(discipline),
+    normReferenties: [
+      ...normReferentiesVoorDiscipline(discipline),
+      `AVOI ${gemeente} (${avoi.versie})`,
+      'WIBON/KLIC · CROW 500 (zorgvuldig grondroeren)',
+    ],
     roadCenterlines,
     pandPolygonen,
     begroeidPolygonen,
@@ -231,5 +349,11 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
     watergangen,
     belemmeringen,
     bestaandNet,
+    bomen,
+    // Geleerde voorkeurscorridors uit geüploade referentieontwerpen (alleen nabij het zoekgebied)
+    referentieTraces: getDemoReferentieTraces()
+      .map((r) => r.coordinates)
+      .filter((line) => !searchBbox || lineIntersectsBbox(line, searchBbox)),
+    risicoZones,
   };
 }

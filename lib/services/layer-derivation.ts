@@ -47,19 +47,49 @@ export function centerlineFromPolygon(ring: [number, number][]): [number, number
   ];
 }
 
+function ringOppervlakteM2(ring: [number, number][]): number {
+  let opp = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    opp += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return Math.abs(opp) / 2;
+}
+
+function lijnLengteM(coords: [number, number][]): number {
+  let lengte = 0;
+  for (let i = 1; i < coords.length; i++) {
+    lengte += Math.hypot(coords[i][0] - coords[i - 1][0], coords[i][1] - coords[i - 1][1]);
+  }
+  return lengte;
+}
+
 /** Watergangen afleiden uit live BGT-waterdeel (geen hardcoded demo-coördinaten). */
 export function watergangenFromBgt(
   bbox: BboxQuery,
   bgt: BgtFeature[],
   source: ConnectorMode
-): { naam: string; type: string; coordinates: [number, number][]; _source: ConnectorMode }[] {
-  const items: { naam: string; type: string; coordinates: [number, number][]; _source: ConnectorMode }[] = [];
+): { naam: string; type: string; coordinates: [number, number][]; breedteM?: number; _source: ConnectorMode }[] {
+  const items: {
+    naam: string;
+    type: string;
+    coordinates: [number, number][];
+    breedteM?: number;
+    _source: ConnectorMode;
+  }[] = [];
 
   for (const feature of bgt) {
     if (feature.type !== 'water') continue;
     let coords: [number, number][] = [];
+    let breedteM: number | undefined;
     if (feature.geometry.type === 'Polygon') {
-      coords = centerlineFromPolygon(feature.geometry.coordinates[0] as [number, number][]);
+      const ring = feature.geometry.coordinates[0] as [number, number][];
+      coords = centerlineFromPolygon(ring);
+      // Echte breedte van het waterdeel: oppervlakte / hartlijnlengte
+      const lengte = lijnLengteM(coords);
+      if (lengte > 1) {
+        breedteM = Math.round((ringOppervlakteM2(ring) / lengte) * 10) / 10;
+        breedteM = Math.min(Math.max(breedteM, 0.5), 150);
+      }
     } else if (feature.geometry.type === 'LineString') {
       coords = feature.geometry.coordinates.map(([x, y]) => [x, y] as [number, number]);
     }
@@ -68,9 +98,10 @@ export function watergangenFromBgt(
       naam: feature.label || 'Watergang',
       type: 'watergang',
       coordinates: coords,
+      breedteM,
       _source: source,
     });
   }
 
-  return items.slice(0, 25);
+  return items.slice(0, 60);
 }

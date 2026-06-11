@@ -49,7 +49,19 @@ export async function runVolledigeBoorengineeringAction(
   if (!trace) throw new Error('Tracé niet gevonden');
   const engineering = await runBoorengineeringAction(traceId, selectedVolgordes);
   const tekeningen = await generateBoorTekeningenAction(traceId, engineering);
-  const { saveTekeningenToDossier } = await import('@/lib/dossier/store');
+  const { saveTekeningenToDossier, addToDossier } = await import('@/lib/dossier/store');
   saveTekeningenToDossier(trace.projectId, traceId, tekeningen);
+
+  // Uitvoeringsplan boringen hoort bij de boorset in het dossier
+  const { buildBoorUitvoeringsplan } = await import('@/lib/bore/uitvoeringsplan');
+  addToDossier({
+    projectId: trace.projectId,
+    traceId,
+    naam: `Uitvoeringsplan boringen — ${trace.code}`,
+    type: 'rapport',
+    inhoud: buildBoorUitvoeringsplan(trace, engineering),
+    formaat: 'markdown',
+  });
+
   return { engineering, tekeningen };
 }

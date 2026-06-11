@@ -14,7 +14,7 @@ export function PageContainer({ children, className, size = 'default' }: PageCon
   };
 
   return (
-    <div className={cn('mx-auto space-y-8 p-6 lg:p-8', sizes[size], className)}>
+    <div className={cn('mx-auto space-y-6 p-4 sm:p-6 lg:space-y-8 lg:p-8', sizes[size], className)}>
       {children}
     </div>
   );

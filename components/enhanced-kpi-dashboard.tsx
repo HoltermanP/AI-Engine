@@ -32,7 +32,7 @@ export function EnhancedKpiDashboard({ kpis, actiesPerSignaal }: EnhancedKpiDash
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <ClickableStatCard href={dashboardUrl({ status: 'actief' })} ariaLabel="Actieve projecten bekijken">
           <Card className="relative h-full overflow-hidden border-[#2D6FE8]/20 bg-gradient-to-br from-[#2D6FE8]/8 via-white to-white stat-glow-blue">
             <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#2D6FE8]/15 blur-2xl" />

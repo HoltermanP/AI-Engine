@@ -11,7 +11,7 @@ import { DEMO_USER } from '@/lib/auth';
 import { enrichActions } from '@/lib/services/action-signals';
 import { getAllProjectSummaries, getManagementKPIs, getProjectActions } from '@/lib/services/project-stats';
 import { cn } from '@/lib/utils';
-import { ArrowRight, BarChart3, ClipboardList, FileBarChart, Map } from 'lucide-react';
+import { ArrowRight, Map } from 'lucide-react';
 
 export default async function DashboardPage() {
   const summaries = await getAllProjectSummaries();
@@ -33,34 +33,14 @@ export default async function DashboardPage() {
           title="Jouw infrastructuur, onder controle"
           subtitle="Van tracé-ontwerp tot dossier — volg voortgang, los conflicten op en houd grip op elk project in één overzicht."
           actions={
-            <>
-              <Link
-                href="/project/demo-project-001"
-                className={cn(buttonVariants({ size: 'sm' }), 'shadow-md shadow-[#2D6FE8]/25')}
-              >
-                <Map className="h-3.5 w-3.5" />
-                Naar werkruimte
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-              <Link
-                href="/rapportage"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'bg-white/80')}
-              >
-                <FileBarChart className="h-3.5 w-3.5" />
-                Rapportage
-              </Link>
-              <Link
-                href="/acties"
-                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'bg-white/80')}
-              >
-                <ClipboardList className="h-3.5 w-3.5" />
-                Open acties
-              </Link>
-              <Link href="/beheer" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                <BarChart3 className="h-3.5 w-3.5" />
-                Beheer
-              </Link>
-            </>
+            <Link
+              href="/project/demo-project-001"
+              className={cn(buttonVariants({ size: 'sm' }), 'shadow-md shadow-[#2D6FE8]/25')}
+            >
+              <Map className="h-3.5 w-3.5" />
+              Naar werkruimte
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           }
         />
 

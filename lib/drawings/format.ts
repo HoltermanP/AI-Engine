@@ -58,13 +58,17 @@ export const TEKENING_STRUCTUUR_EISEN = {
     'RD EPSG:28992',
   ],
   perType: {
-    trace_plan: ['Noordpijl', 'Legenda', 'Schaal', 'Start', 'Ontwerptracé', 'Bestaand net', 'BRT PDOK', 'Maatvoering'],
+    trace_plan: ['Noordpijl', 'Legenda', 'Schaal', 'Start', 'Ontwerptracé', 'Bestaand net', 'BGT PDOK', 'Maatvoering'],
     length_profile: ['Ketting (m)', 'm NAP', 'Maaiveld', 'Ontwerpdiepte', 'Legenda', 'Vert.'],
     cross_section: ['AVOI', 'Ordening', 'Maaiveld (NAP)', 'Legenda', 'Wegas', 'Maatvoering'],
     crossing_detail: ['Maaiveld', 'Dekking', 'Legenda', 'Maatvoering'],
     station: ['Ruimtebeslag', 'MS-ruimte', 'Legenda'],
+    station_eenlijn: ['Eenlijnschema', 'MS-rail', 'LS-rail', 'Trafo', 'Legenda'],
+    station_plattegrond: ['Plattegrond', 'Ruimtebeslag', 'Legenda', 'Maatvoering'],
+    werktekening: ['Noordpijl', 'Legenda', 'Schaal', 'Ontwerptracé', 'Mof', 'Maatvoering'],
     bore_plan: ['Startput', 'Eindput', 'Boogtraject', 'Ontwerptracé', 'Legenda', 'Maatvoering', 'Noordpijl', 'Schaal'],
     bore_profile: ['Maaiveld', 'Boogtraject', 'Ontwerpdiepte', 'Grondwater', 'Legenda', 'Ketting (m)', 'm NAP', 'Vert.'],
+    bore_setup: ['Boorstelling', 'Startput', 'Pijpenbaan', 'Veiligheidszone', 'Mudrecycling', 'Legenda', 'Maatvoering', 'Noordpijl'],
   },
 } as const;
 
@@ -84,8 +88,12 @@ const TYPE_PREFIX: Record<DrawingType, string> = {
   cross_section: 'TK-DWP',
   crossing_detail: 'TK-KRS',
   station: 'TK-STN',
+  station_eenlijn: 'TK-EEN',
+  station_plattegrond: 'TK-SPL',
+  werktekening: 'TK-WRK',
   bore_plan: 'TK-BPL',
   bore_profile: 'TK-BPR',
+  bore_setup: 'TK-BOP',
 };
 
 export interface TekeningLegendaItem {
@@ -695,7 +703,7 @@ export function valideerTekening(svg: string, type: DrawingType): { geldig: bool
     }
   }
 
-  if (!/TK-(PLN|LNP|DWP|KRS|STN|BPL|BPR)-/.test(svg)) {
+  if (!/TK-(PLN|LNP|DWP|KRS|STN|BPL|BPR|BOP)-/.test(svg)) {
     fouten.push('Ontbrekend tekeningnummer (TK-xxx patroon)');
   }
 

@@ -44,6 +44,11 @@ interface MapWorkspaceProps {
     traceLines: [number, number, number][][];
     selected: boolean;
   }[];
+  /** Netontwerp-assets op de kaart (stations/moffen/mantelbuizen) */
+  netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
+  /** Plaatsmodus: kaartklik plaatst een asset (RD-coördinaten) i.p.v. tracé-bewerking */
+  onAssetPlaats?: (x: number, y: number) => void;
+  onAssetClick?: (assetId: string) => void;
 }
 
 function emptyTraceLine(): TraceLines {
@@ -104,6 +109,9 @@ export function MapWorkspace({
   onAutoWaypointsChange,
   onLayerDataChange,
   routeAlternatives = [],
+  netontwerpAssets,
+  onAssetPlaats,
+  onAssetClick,
 }: MapWorkspaceProps) {
   const lazy = useLazyMapLayers({ traceId });
   const layerData = useMemo(
@@ -218,6 +226,11 @@ export function MapWorkspace({
     (lng: number, lat: number) => {
       const [x, y] = wgs84ToRd(lng, lat);
 
+      if (onAssetPlaats) {
+        onAssetPlaats(x, y);
+        return;
+      }
+
       if (drawMode === 'auto') {
         setAutoWaypoints((prev) => [...prev, { x, y }]);
         return;
@@ -289,7 +302,7 @@ export function MapWorkspace({
 
   return (
     <div className="flex h-full flex-col overflow-hidden lg:flex-row">
-      <div className="w-full shrink-0 overflow-auto border-b border-border bg-card p-3 lg:w-52 lg:border-b-0 lg:border-r xl:w-56">
+      <div className="max-h-[40dvh] w-full shrink-0 overflow-auto border-b border-border bg-card p-3 lg:max-h-none lg:w-52 lg:border-b-0 lg:border-r xl:w-56">
         {layerPanelProps && <MapLayerPanel {...layerPanelProps} />}
         <MapDisplayControls
           traceLineWidth={traceLineWidth}
@@ -303,7 +316,7 @@ export function MapWorkspace({
           editable={editable}
         />
       </div>
-      <div className="min-h-[400px] flex-1">
+      <div className="min-h-[280px] min-w-0 flex-1 lg:min-h-0">
         <TraceMap
           traces={traces}
           bestaandNet={bestaandNet}
@@ -326,6 +339,9 @@ export function MapWorkspace({
           routeAlternatives={routeAlternatives}
           onMapClick={handleTraceEdit}
           onTraceLinesChange={handleTraceLinesChange}
+          netontwerpAssets={netontwerpAssets}
+          plaatsModusActief={Boolean(onAssetPlaats)}
+          onAssetClick={onAssetClick}
         />
       </div>
     </div>

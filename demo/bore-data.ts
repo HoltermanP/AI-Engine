@@ -91,12 +91,20 @@ function defaultTrajectory(
   buisDiameterMm: number,
   maaiveldNap: number,
   diepteAsNap: number,
-  lengteM: number,
+  vereisteDekking: number,
 ): BoreTrajectory {
   const minR = minBoogstraalM(buisDiameterMm, methode);
   const entryAngle = methode === 'hdd' ? 12 : methode === 'persing' ? 8 : 10;
   const exitAngle = entryAngle;
-  const maxDiepte = maxDiepteNap(maaiveldNap, diepteAsNap, minR, entryAngle);
+  const maxDiepte = maxDiepteNap(
+    maaiveldNap,
+    diepteAsNap,
+    minR,
+    entryAngle,
+    vereisteDekking,
+    buisDiameterMm,
+    methode,
+  );
   const entryPut = putAfmetingen(methode, buisDiameterMm);
   const exitPut = putAfmetingen(methode, buisDiameterMm);
 
@@ -105,7 +113,7 @@ function defaultTrajectory(
     exitAngleDeg: exitAngle,
     maxDiepteNap: maxDiepte,
     boogstraalM: minR,
-    booglengteM: booglengteM(minR, 90) * 2,
+    booglengteM: booglengteM(minR, entryAngle) + booglengteM(minR, exitAngle),
     entryPutL: entryPut.lengteM,
     exitPutL: exitPut.lengteM,
     entryPutB: entryPut.breedteM,
@@ -134,7 +142,7 @@ export function buildBoreSegmentInput(trace: DemoTrace, seg: TraceSegment): Bore
     buisDiameterMm,
     maaiveldNap,
     diepteAsNap,
-    seg.lengteM,
+    trace.vereisteDekking,
   );
 
   return {

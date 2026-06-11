@@ -55,6 +55,12 @@ export const DXF_LAGEN = {
   lpMaaiveld: { naam: 'OB-BESTAAND-MAAIVELD', kleur: NLCS_KLEUR.maaiveld },
   /** Lengteprofiel: kabel/leiding-as (ontwerp) */
   lpLeidingAs: { naam: 'KR-NIEUW WERK-LENGTEPROFIEL', kleur: IMKL_COLORS.middenspanning },
+  /** Werktekening: moffen op het nieuwe tracé */
+  moffen: { naam: 'KR-NIEUW WERK-MOFFEN', kleur: '#E67E22' },
+  /** Werktekening: mantelbuizen (kruisingen) */
+  mantelbuizen: { naam: 'KR-NIEUW WERK-MANTELBUIS', kleur: '#0E7490' },
+  /** Werktekening: stations (trafostation/verdeelkast) */
+  stations: { naam: 'KR-NIEUW WERK-STATION', kleur: '#7C3AED' },
 } as const;
 
 /** Laag voor bestaand net per KLIC-thema. */
@@ -269,6 +275,381 @@ export function generateLengthProfileDxf(input: LengteprofielDxfInput): string {
       point3d(0, maxZ * vScale + tekstHoogte * 3),
       tekstHoogte * 1.25,
       `Lengteprofiel ${input.naam} (vert. ${vScale}×)`,
+      { layerName: DXF_LAGEN.annotatie.naam }
+    );
+  }
+
+  return writer.stringify();
+}
+
+/* ───────────────────────── Dwarsprofiel (AVOI) ───────────────────────── */
+
+export interface DwarsprofielDxfSlot {
+  label: string;
+  /** Horizontale afstand t.o.v. wegas (m, + = noord/links) */
+  offsetM: number;
+  /** Hoogte leiding-as in m NAP */
+  diepteNap: number;
+}
+
+export interface DwarsprofielDxfInput {
+  naam?: string;
+  /** Breedte van het getekende profiel (m) */
+  profielBreedteM: number;
+  /** Maaiveldhoogte in m NAP (default 0) */
+  maaiveldNap?: number;
+  /** AVOI-ordening: kabels/leidingen met offset en diepte */
+  slots: DwarsprofielDxfSlot[];
+  /** Verticale schaalfactor (default 5×) */
+  verticaleSchaal?: number;
+  tekstHoogteM?: number;
+}
+
+/**
+ * Dwarsprofiel-DXF conform AVOI-ordening: maaiveldlijn, wegas en per
+ * kabel/leiding een cirkelsymbool met label op (offset, diepte × v-schaal).
+ */
+export function generateCrossSectionDxf(input: DwarsprofielDxfInput): string {
+  const writer = new DxfWriter();
+  writer.setUnits(Units.Meters);
+
+  const vScale = input.verticaleSchaal ?? 5;
+  const tekst = input.tekstHoogteM ?? 0.6;
+  const maaiveld = (input.maaiveldNap ?? 0) * vScale;
+  const halfBreedte = input.profielBreedteM / 2;
+
+  voegLaagToe(writer, DXF_LAGEN.lpMaaiveld);
+  voegLaagToe(writer, DXF_LAGEN.traceNieuw);
+  voegLaagToe(writer, DXF_LAGEN.kruising);
+  voegLaagToe(writer, DXF_LAGEN.annotatie);
+
+  // Maaiveldlijn en wegas
+  writer.addLWPolyline(
+    [
+      { point: point2d(-halfBreedte, maaiveld) },
+      { point: point2d(halfBreedte, maaiveld) },
+    ],
+    { layerName: DXF_LAGEN.lpMaaiveld.naam }
+  );
+  writer.addLWPolyline(
+    [
+      { point: point2d(0, maaiveld + tekst * 2) },
+      { point: point2d(0, maaiveld - 2 * vScale) },
+    ],
+    { layerName: DXF_LAGEN.kruising.naam }
+  );
+  writer.addText(point3d(0, maaiveld + tekst * 3), tekst, 'Wegas', {
+    layerName: DXF_LAGEN.annotatie.naam,
+  });
+
+  for (const slot of input.slots) {
+    const y = slot.diepteNap * vScale;
+    writer.addCircle(point3d(slot.offsetM, y), 0.2 * vScale, {
+      layerName: DXF_LAGEN.traceNieuw.naam,
+    });
+    writer.addText(
+      point3d(slot.offsetM + 0.4, y - tekst / 2),
+      tekst,
+      `${slot.label} (${slot.offsetM >= 0 ? '+' : ''}${slot.offsetM.toFixed(1)} m, ${slot.diepteNap.toFixed(2)} NAP)`,
+      { layerName: DXF_LAGEN.annotatie.naam }
+    );
+  }
+
+  if (input.naam) {
+    writer.addText(
+      point3d(-halfBreedte, maaiveld + tekst * 5),
+      tekst * 1.25,
+      `Dwarsprofiel ${input.naam} (vert. ${vScale}×)`,
+      { layerName: DXF_LAGEN.annotatie.naam }
+    );
+  }
+
+  return writer.stringify();
+}
+
+/* ───────────────────────── Kruisingsdetail ───────────────────────── */
+
+export interface KruisingDetailDxfInput {
+  naam?: string;
+  /** Dekking nieuwe leiding (m onder maaiveld) */
+  dekkingM: number;
+  /** Buitendiameter nieuwe leiding (mm, default 160) */
+  diameterMm?: number;
+  /** Diepte bestaande (gekruiste) leiding (m onder maaiveld, default 1.0) */
+  bestaandeDiepteM?: number;
+  /** Uitvoeringsmethode, bijv. "Nanodrill" — als annotatie */
+  methodeLabel?: string;
+  tekstHoogteM?: number;
+}
+
+/**
+ * Kruisingsdetail-DXF: maaiveld, nieuwe leiding (met mantelbuis), bestaande
+ * leiding en dekkingmaatvoering — schaal 1:1 in meters.
+ */
+export function generateCrossingDetailDxf(input: KruisingDetailDxfInput): string {
+  const writer = new DxfWriter();
+  writer.setUnits(Units.Meters);
+
+  const tekst = input.tekstHoogteM ?? 0.12;
+  const d = (input.diameterMm ?? 160) / 1000;
+  const dekking = input.dekkingM;
+  const bestaandDiep = input.bestaandeDiepteM ?? 1.0;
+  const breed = 4;
+
+  voegLaagToe(writer, DXF_LAGEN.lpMaaiveld);
+  voegLaagToe(writer, DXF_LAGEN.traceNieuw);
+  voegLaagToe(writer, DXF_LAGEN.bestaandOverig);
+  voegLaagToe(writer, DXF_LAGEN.annotatie);
+
+  // Maaiveld
+  writer.addLWPolyline(
+    [{ point: point2d(-breed / 2, 0) }, { point: point2d(breed / 2, 0) }],
+    { layerName: DXF_LAGEN.lpMaaiveld.naam }
+  );
+  writer.addText(point3d(-breed / 2, tekst * 1.5), tekst, 'Maaiveld', {
+    layerName: DXF_LAGEN.annotatie.naam,
+  });
+
+  // Nieuwe leiding + mantelbuis
+  const yNieuw = -(dekking + d / 2);
+  writer.addCircle(point3d(0, yNieuw), d / 2, { layerName: DXF_LAGEN.traceNieuw.naam });
+  writer.addCircle(point3d(0, yNieuw), d / 2 + 0.05, { layerName: DXF_LAGEN.traceNieuw.naam });
+  writer.addText(point3d(0.3, yNieuw), tekst, `Nieuwe leiding Ø${input.diameterMm ?? 160} mm in mantelbuis`, {
+    layerName: DXF_LAGEN.annotatie.naam,
+  });
+
+  // Bestaande leiding (gekruist, haaks — symbool)
+  writer.addCircle(point3d(-1, -bestaandDiep), 0.08, {
+    layerName: DXF_LAGEN.bestaandOverig.naam,
+  });
+  writer.addText(point3d(-0.85, -bestaandDiep), tekst, 'Bestaande leiding', {
+    layerName: DXF_LAGEN.annotatie.naam,
+  });
+
+  // Dekking-maatvoering
+  writer.addLWPolyline(
+    [{ point: point2d(0.9, 0) }, { point: point2d(0.9, yNieuw + d / 2) }],
+    { layerName: DXF_LAGEN.annotatie.naam }
+  );
+  writer.addText(point3d(1.0, yNieuw / 2), tekst, `Dekking ${dekking.toFixed(2)} m`, {
+    layerName: DXF_LAGEN.annotatie.naam,
+  });
+
+  if (input.naam || input.methodeLabel) {
+    writer.addText(
+      point3d(-breed / 2, tekst * 4),
+      tekst * 1.25,
+      `Kruisingsdetail ${input.naam ?? ''}${input.methodeLabel ? ` — ${input.methodeLabel}` : ''}`,
+      { layerName: DXF_LAGEN.annotatie.naam }
+    );
+  }
+
+  return writer.stringify();
+}
+
+/* ───────────────────────── Boorplan & boorprofiel ───────────────────────── */
+
+export interface BoorplanDxfInput {
+  naam?: string;
+  /** Boorsegment-centerline in RD */
+  centerline: RdPunt[];
+  /** Startput: afmetingen (m) */
+  entryPut: { l: number; b: number };
+  /** Eindput: afmetingen (m) */
+  exitPut: { l: number; b: number };
+  tekstHoogteM?: number;
+}
+
+/** Boorplan-DXF (situatie): boorlijn met start- en eindput als contouren. */
+export function generateBorePlanDxf(input: BoorplanDxfInput): string {
+  const writer = new DxfWriter();
+  writer.setUnits(Units.Meters);
+  const tekst = input.tekstHoogteM ?? 2.5;
+
+  voegLaagToe(writer, DXF_LAGEN.traceNieuw);
+  voegLaagToe(writer, DXF_LAGEN.kruising);
+  voegLaagToe(writer, DXF_LAGEN.annotatie);
+
+  if (input.centerline.length >= 2) {
+    writer.addLWPolyline(naarVertices(input.centerline), {
+      layerName: DXF_LAGEN.traceNieuw.naam,
+    });
+  }
+
+  const put = (punt: RdPunt, maat: { l: number; b: number }, label: string) => {
+    const [x, y] = punt;
+    writer.addLWPolyline(
+      [
+        { point: point2d(x - maat.l / 2, y - maat.b / 2) },
+        { point: point2d(x + maat.l / 2, y - maat.b / 2) },
+        { point: point2d(x + maat.l / 2, y + maat.b / 2) },
+        { point: point2d(x - maat.l / 2, y + maat.b / 2) },
+        { point: point2d(x - maat.l / 2, y - maat.b / 2) },
+      ],
+      { layerName: DXF_LAGEN.kruising.naam }
+    );
+    writer.addText(point3d(x, y + maat.b / 2 + tekst), tekst * 0.8, `${label} ${maat.l.toFixed(1)}×${maat.b.toFixed(1)} m`, {
+      layerName: DXF_LAGEN.annotatie.naam,
+    });
+  };
+
+  if (input.centerline.length >= 2) {
+    put(input.centerline[0], input.entryPut, 'Startput');
+    put(input.centerline[input.centerline.length - 1], input.exitPut, 'Eindput');
+  }
+
+  if (input.naam && input.centerline.length > 0) {
+    const [x, y] = input.centerline[0];
+    writer.addText(point3d(x, y - tekst * 3), tekst, `Boorplan ${input.naam}`, {
+      layerName: DXF_LAGEN.annotatie.naam,
+    });
+  }
+
+  return writer.stringify();
+}
+
+/* ───────────────────────── Werktekening (UO) ───────────────────────── */
+
+export interface WerktekeningDxfInput {
+  naam?: string;
+  /** Ontwerptracé-centerlines in RD */
+  centerlines: RdPunt[][];
+  /** Moffen: positie in RD + korte code (M/EM/OM) + chainage (m) */
+  moffen: { x: number; y: number; code: string; chainageM: number }[];
+  /** Mantelbuizen: lijnstuk in RD + diameterlabel */
+  mantelbuizen: { coordinaten: RdPunt[]; label: string }[];
+  /** Stations: positie in RD + naam */
+  stations: { x: number; y: number; naam: string }[];
+  tekstHoogteM?: number;
+}
+
+/** Werktekening-DXF: tracé + moffen + mantelbuizen + stations op NLCS-lagen. */
+export function generateWerktekeningDxf(input: WerktekeningDxfInput): string {
+  const writer = new DxfWriter();
+  writer.setUnits(Units.Meters);
+  const tekst = input.tekstHoogteM ?? 2;
+
+  voegLaagToe(writer, DXF_LAGEN.traceNieuw);
+  voegLaagToe(writer, DXF_LAGEN.moffen);
+  voegLaagToe(writer, DXF_LAGEN.mantelbuizen);
+  voegLaagToe(writer, DXF_LAGEN.stations);
+  voegLaagToe(writer, DXF_LAGEN.annotatie);
+
+  for (const lijn of input.centerlines) {
+    if (lijn.length >= 2) {
+      writer.addLWPolyline(naarVertices(lijn), { layerName: DXF_LAGEN.traceNieuw.naam });
+    }
+  }
+
+  for (const mof of input.moffen) {
+    writer.addCircle(point3d(mof.x, mof.y), tekst * 0.6, {
+      layerName: DXF_LAGEN.moffen.naam,
+    });
+    writer.addText(
+      point3d(mof.x + tekst, mof.y + tekst * 0.5),
+      tekst * 0.7,
+      `${mof.code} ${(mof.chainageM / 1000).toFixed(3)}k`,
+      { layerName: DXF_LAGEN.annotatie.naam },
+    );
+  }
+
+  for (const mb of input.mantelbuizen) {
+    if (mb.coordinaten.length >= 2) {
+      writer.addLWPolyline(naarVertices(mb.coordinaten), {
+        layerName: DXF_LAGEN.mantelbuizen.naam,
+      });
+      const [mx, my] = mb.coordinaten[Math.floor(mb.coordinaten.length / 2)];
+      writer.addText(point3d(mx, my + tekst), tekst * 0.7, mb.label, {
+        layerName: DXF_LAGEN.annotatie.naam,
+      });
+    }
+  }
+
+  for (const st of input.stations) {
+    const h = tekst * 1.2;
+    writer.addLWPolyline(
+      [
+        { point: point2d(st.x - h, st.y - h) },
+        { point: point2d(st.x + h, st.y - h) },
+        { point: point2d(st.x + h, st.y + h) },
+        { point: point2d(st.x - h, st.y + h) },
+        { point: point2d(st.x - h, st.y - h) },
+      ],
+      { layerName: DXF_LAGEN.stations.naam },
+    );
+    writer.addText(point3d(st.x, st.y - h - tekst), tekst * 0.8, st.naam, {
+      layerName: DXF_LAGEN.annotatie.naam,
+    });
+  }
+
+  if (input.naam && input.centerlines[0]?.length) {
+    const [x, y] = input.centerlines[0][0];
+    writer.addText(point3d(x, y + tekst * 3), tekst * 1.2, `Werktekening ${input.naam}`, {
+      layerName: DXF_LAGEN.annotatie.naam,
+    });
+  }
+
+  return writer.stringify();
+}
+
+export interface BoorprofielDxfInput {
+  naam?: string;
+  /** Maaiveldlijn: [chainage, m NAP][] */
+  maaiveld: ProfielPunt[];
+  /** Boorlijn (ontwerp): [chainage, m NAP][] */
+  boorlijn: ProfielPunt[];
+  /** Grondwaterstand in m NAP (optioneel) */
+  grondwaterNap?: number;
+  verticaleSchaal?: number;
+  tekstHoogteM?: number;
+}
+
+/** Boorprofiel-DXF: maaiveld, boorlijn en grondwaterstand met overhoogte. */
+export function generateBoreProfileDxf(input: BoorprofielDxfInput): string {
+  const writer = new DxfWriter();
+  writer.setUnits(Units.Meters);
+
+  const vScale = input.verticaleSchaal ?? 10;
+  const tekst = input.tekstHoogteM ?? 2;
+
+  voegLaagToe(writer, DXF_LAGEN.lpMaaiveld);
+  voegLaagToe(writer, DXF_LAGEN.lpLeidingAs);
+  voegLaagToe(writer, DXF_LAGEN.bestaandWater);
+  voegLaagToe(writer, DXF_LAGEN.annotatie);
+
+  const profiel = (punten: ProfielPunt[]): LWPolylineVertex[] =>
+    punten.map(([c, z]) => ({ point: point2d(c, z * vScale) }));
+
+  if (input.maaiveld.length >= 2) {
+    writer.addLWPolyline(profiel(input.maaiveld), { layerName: DXF_LAGEN.lpMaaiveld.naam });
+  }
+  if (input.boorlijn.length >= 2) {
+    writer.addLWPolyline(profiel(input.boorlijn), { layerName: DXF_LAGEN.lpLeidingAs.naam });
+  }
+
+  const maxChainage = Math.max(...[...input.maaiveld, ...input.boorlijn].map(([c]) => c), 0);
+  if (input.grondwaterNap !== undefined && maxChainage > 0) {
+    writer.addLWPolyline(
+      [
+        { point: point2d(0, input.grondwaterNap * vScale) },
+        { point: point2d(maxChainage, input.grondwaterNap * vScale) },
+      ],
+      { layerName: DXF_LAGEN.bestaandWater.naam }
+    );
+    writer.addText(
+      point3d(0, input.grondwaterNap * vScale + tekst),
+      tekst * 0.8,
+      `Grondwater ${input.grondwaterNap.toFixed(2)} m NAP`,
+      { layerName: DXF_LAGEN.annotatie.naam }
+    );
+  }
+
+  if (input.naam) {
+    const maxZ = Math.max(...[...input.maaiveld, ...input.boorlijn].map(([, z]) => z), 0);
+    writer.addText(
+      point3d(0, maxZ * vScale + tekst * 3),
+      tekst * 1.25,
+      `Boorprofiel ${input.naam} (vert. ${vScale}×)`,
       { layerName: DXF_LAGEN.annotatie.naam }
     );
   }

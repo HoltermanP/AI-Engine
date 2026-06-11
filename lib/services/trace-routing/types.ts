@@ -20,6 +20,8 @@ export interface TraceRoutingInput {
     thema: string;
     beheerder: string;
     coordinates: [number, number, number?][];
+    /** Minimale parallelafstand (m) conform netbeheerder/NEN 7171 */
+    vrijTeHoudenAfstand?: number;
   }[];
   useAi?: boolean;
 }
@@ -37,6 +39,8 @@ export interface RouteSegmentAnalysis {
   opmerkingen: string[];
   /** Privaat terrein — zakelijk recht vereist */
   zakelijkRechtVereist?: boolean;
+  /** Gemotiveerde afwijkingen van de richtlijnen (wat + waarom + maatregel) */
+  afwijkingen?: string[];
 }
 
 export interface RouteCrossing {
@@ -45,6 +49,16 @@ export interface RouteCrossing {
   breedteM?: number;
   legtechniek: TraceSegment['legtechniek'];
   normReferentie?: string;
+  /** Gekozen uitvoeringsmethode (asfaltzagen, nanodrill, gestuurde boring, …) */
+  methode?: string;
+  methodeLabel?: string;
+  beheerder?: string;
+  vergunning?: string;
+  /** Gekozen oplossing + afgewezen alternatieven met reden */
+  afweging?: string[];
+  /** Kruisingslocatie (RD) voor annotatie op de tekening */
+  x?: number;
+  y?: number;
 }
 
 export interface TraceRoutingResult {
@@ -92,7 +106,22 @@ export interface RoutingContext {
   pandPolygonen: [number, number][][];
   begroeidPolygonen: [number, number][][];
   percelen: { id: string; perceelnummer: string; polygon: [number, number][]; publiek?: boolean }[];
-  watergangen: { naam: string; coordinates: [number, number][] }[];
+  watergangen: { naam: string; coordinates: [number, number][]; breedteM?: number }[];
   belemmeringen: { id: string; categorie: string; naam?: string; coordinates: [number, number][] }[];
   bestaandNet: TraceRoutingInput['bestaandNet'];
+  /** Boompunten (BGT vegetatieobject) — minimale afstand bewaken */
+  bomen: { x: number; y: number }[];
+  /** Geüploade referentieontwerpen: geleerde voorkeurscorridors */
+  referentieTraces: [number, number][][];
+  /** Risicozones uit de datalagen: vermijden waar mogelijk, anders gemotiveerd afwijken */
+  risicoZones: RisicoZone[];
+}
+
+export interface RisicoZone {
+  type: 'bodem' | 'natura2000' | 'archeologie' | 'nge' | 'flora_fauna';
+  naam: string;
+  polygon: [number, number][];
+  ernst: 'hoog' | 'middel' | 'laag';
+  /** Maatregel/onderzoeksplicht bij doorkruising */
+  maatregel: string;
 }

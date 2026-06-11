@@ -107,26 +107,16 @@ export function TraceFase2Panel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden lg:flex-row">
-      <div className="w-full shrink-0 overflow-auto border-b border-border bg-card p-4 lg:w-80 lg:border-b-0 lg:border-r">
+      <div className="max-h-[45dvh] w-full shrink-0 overflow-auto border-b border-border bg-card p-4 lg:max-h-none lg:w-80 lg:border-b-0 lg:border-r">
         <div className="mb-3 space-y-2">
-          <p className="text-xs font-medium text-foreground">Datalagen</p>
+          <p className="text-xs font-medium text-foreground">Tracé toetsen</p>
           <p className="text-[11px] text-muted-foreground">
-            Zet lagen aan in het paneel links op de kaart. Data wordt automatisch
-            opgehaald voor het zichtbare gebied (heel Nederland).
-          </p>
-        </div>
-
-        <div className="mb-3 space-y-2">
-          <p className="text-xs font-medium text-foreground">Risico&apos;s & toetsing</p>
-          <p className="text-[11px] text-muted-foreground">
-            Tracé-toets haalt trace-specifieke data op (KLIC, AHN, bodemrisico) en
-            toont conflicten op de kaart — inclusief doorschreden of nabijgelegen
-            risicogebieden.
+            Haalt KLIC, AHN en bodemrisico op voor dit tracé en toont conflicten op de
+            kaart. Extra datalagen zet je aan in het kaartpaneel.
           </p>
           <Button
             size="sm"
-            variant="outline"
-            className="w-full"
+            className="w-full bg-[#2D6FE8] text-white hover:bg-[#2563d4]"
             onClick={handleToets}
             disabled={isPending}
           >
@@ -209,7 +199,7 @@ export function TraceFase2Panel({
         )}
       </div>
 
-      <div className="min-h-[400px] flex-1">
+      <div className="min-h-[280px] min-w-0 flex-1 lg:min-h-0">
         <MapWorkspace
           traces={traces}
           onTracesChange={onTracesChange}

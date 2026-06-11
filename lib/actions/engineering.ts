@@ -8,7 +8,7 @@ import {
   generateAanvragen,
   generateVergunningChecklist,
 } from '@/lib/research/generator';
-import { aiConnector } from '@/lib/connectors/ai';
+import { anthropicComplete } from '@/lib/connectors/ai/anthropic';
 import type { CollectedTraceData } from '@/lib/services/collect-trace-data';
 import type { DetectedConflict } from '@/lib/services/conflict-detection';
 import { generateDoDocument } from '@/lib/dossier/do-document';
@@ -104,9 +104,12 @@ export async function aiAnalyseAction(
     .map((c) => `[${c.ernst}] ${c.type}: ${c.toelichting}`)
     .join('\n');
 
-  const result = await aiConnector.fetch({
-    prompt: `Analyseer de volgende conflicten voor tracé ${trace.code} en geef begrijpelijke samenvatting + oplossingsrichtingen:\n${context}`,
-    context: trace.naam,
+  const result = await anthropicComplete({
+    maxTokens: 4096,
+    system:
+      'Je bent een Nederlandse engineering-assistent voor ondergrondse infrastructuur. ' +
+      'Gebruik vakterminologie (tracé, dekking, NEN-normen). Antwoord in het Nederlands, beknopt en actionable.',
+    prompt: `Analyseer de volgende conflicten voor tracé ${trace.code} (${trace.naam}) en geef begrijpelijke samenvatting + oplossingsrichtingen:\n${context}`,
   });
 
   saveAiAnalyseToDossier(trace.projectId, traceId, trace.code, result.text, result._source);
@@ -167,4 +170,19 @@ export async function runAlleOnderzoekenEnProcessenAction(
   completeAllOpenActionsForTrace(traceId);
 
   return { onderzoeken, aanvragen, checklist, berekeningen, tekeningen, ai };
+}
+
+/** Stel de uitvoeringsmap samen: bundel + compleetheidstoets, opgeslagen in het dossier. */
+export async function stelUitvoeringsmapSamenAction(traceId: string): Promise<{
+  compleet: boolean;
+  ontbrekend: string[];
+  naam: string;
+}> {
+  const { getTrace, getBestaandNet } = await import('@/lib/db/store');
+  const { saveUitvoeringsmapToDossier } = await import('@/lib/dossier/uitvoeringsmap');
+  const trace = await getTrace(traceId);
+  if (!trace) throw new Error('Tracé niet gevonden');
+  const bestaandNet = await getBestaandNet();
+  const result = saveUitvoeringsmapToDossier(trace, bestaandNet);
+  return { compleet: result.compleet, ontbrekend: result.ontbrekend, naam: result.item.naam };
 }

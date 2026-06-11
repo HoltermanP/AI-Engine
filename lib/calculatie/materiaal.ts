@@ -47,7 +47,18 @@ function rond(n: number, dec = 1): number {
   return Math.round(n * f) / f;
 }
 
-export function buildMateriaalLijst(trace: DemoTrace): MateriaalLijst {
+/** Werkelijke asset-aantallen uit het netontwerp (vervangen de heuristiek). */
+export interface MateriaalAssetTelling {
+  verbindingsmoffen?: number;
+  eindmoffen?: number;
+  overgangsmoffen?: number;
+  mantelbuizen?: number;
+}
+
+export function buildMateriaalLijst(
+  trace: DemoTrace,
+  assets?: MateriaalAssetTelling,
+): MateriaalLijst {
   const lengteM =
     trace.segmenten.reduce((s, seg) => s + seg.lengteM, 0) ||
     traceLengthM(trace.coordinates, trace.traceLines);
@@ -73,22 +84,35 @@ export function buildMateriaalLijst(trace: DemoTrace): MateriaalLijst {
       hoeveelheidBruto: rond(aantalHaspels * haspel),
       toelichting: `${aantalHaspels} haspel(s) à ${haspel} m`,
     });
-    // Moffen: per haspelovergang één verbindingsmof + 2 eindmoffen
+    // Moffen: werkelijke aantallen uit het netontwerp, anders heuristiek
+    // (per haspelovergang één verbindingsmof + 2 eindmoffen)
+    const verbindingsmoffen = assets?.verbindingsmoffen ?? Math.max(0, aantalHaspels - 1);
+    const eindmoffen = assets?.eindmoffen ?? 2;
     regels.push({
       artikel: trace.discipline === 'elektra_ms' ? 'MOF-MS' : 'MOF-LS',
       omschrijving: `Verbindingsmof ${trace.netType}`,
       eenheid: 'st',
-      hoeveelheidNetto: Math.max(0, aantalHaspels - 1),
-      hoeveelheidBruto: Math.max(0, aantalHaspels - 1),
-      toelichting: 'Per haspelovergang',
+      hoeveelheidNetto: verbindingsmoffen,
+      hoeveelheidBruto: verbindingsmoffen,
+      toelichting: assets?.verbindingsmoffen != null ? 'Uit netontwerp (werktekening)' : 'Per haspelovergang',
     });
     regels.push({
       artikel: trace.discipline === 'elektra_ms' ? 'EIND-MS' : 'EIND-LS',
       omschrijving: 'Eindsluiting / aansluitmof',
       eenheid: 'st',
-      hoeveelheidNetto: 2,
-      hoeveelheidBruto: 2,
+      hoeveelheidNetto: eindmoffen,
+      hoeveelheidBruto: eindmoffen,
     });
+    if (assets?.overgangsmoffen) {
+      regels.push({
+        artikel: trace.discipline === 'elektra_ms' ? 'OMOF-MS' : 'OMOF-LS',
+        omschrijving: 'Overgangsmof (GPLK↔XLPE)',
+        eenheid: 'st',
+        hoeveelheidNetto: assets.overgangsmoffen,
+        hoeveelheidBruto: assets.overgangsmoffen,
+        toelichting: 'Uit netontwerp (werktekening)',
+      });
+    }
   } else {
     const strengLengteM = 12; // standaard buislengte PE/PVC-streng
     regels.push({

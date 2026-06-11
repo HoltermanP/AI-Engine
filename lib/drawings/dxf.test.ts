@@ -3,6 +3,10 @@ import {
   DXF_LAGEN,
   generateLengthProfileDxf,
   generateTraceDxf,
+  generateCrossSectionDxf,
+  generateCrossingDetailDxf,
+  generateBorePlanDxf,
+  generateBoreProfileDxf,
   type LengteprofielDxfInput,
   type TraceDxfInput,
 } from './dxf';
@@ -160,5 +164,77 @@ describe('getConfiguredDwgConverter', () => {
     const converter = getConfiguredDwgConverter();
     expect(converter).not.toBeNull();
     expect(typeof converter?.convert).toBe('function');
+  });
+});
+
+describe('nieuwe DXF-varianten', () => {
+  it('dwarsprofiel bevat AVOI-slots, wegas en NLCS-lagen', () => {
+    const dxf = generateCrossSectionDxf({
+      naam: 'TST-01',
+      profielBreedteM: 20,
+      slots: [
+        { label: 'Elektra LS', offsetM: -1.8, diepteNap: -0.7 },
+        { label: 'Water', offsetM: 2.2, diepteNap: -1.1 },
+      ],
+    });
+    expect(dxf).toContain('SECTION');
+    expect(dxf).toContain(DXF_LAGEN.lpMaaiveld.naam);
+    expect(dxf).toContain(DXF_LAGEN.traceNieuw.naam);
+    expect(dxf).toContain('Wegas');
+    expect(dxf).toContain('Elektra LS');
+    expect(dxf).toContain('Dwarsprofiel TST-01');
+    expect(dxf).toContain('LWPOLYLINE');
+    expect(dxf).toContain('CIRCLE');
+  });
+
+  it('kruisingsdetail bevat dekking-maatvoering en mantelbuis', () => {
+    const dxf = generateCrossingDetailDxf({
+      naam: 'Urkerweg',
+      dekkingM: 1.2,
+      diameterMm: 200,
+      methodeLabel: 'Nanodrill',
+    });
+    expect(dxf).toContain('Dekking 1.20 m');
+    expect(dxf).toContain('mantelbuis');
+    expect(dxf).toContain('Nanodrill');
+    expect(dxf).toContain('Maaiveld');
+    expect(dxf).toContain(DXF_LAGEN.bestaandOverig.naam);
+  });
+
+  it('boorplan bevat start- en eindput met maatvoering', () => {
+    const dxf = generateBorePlanDxf({
+      naam: 'S1',
+      centerline: [
+        [180000, 524000],
+        [180080, 524010],
+      ],
+      entryPut: { l: 4, b: 2.5 },
+      exitPut: { l: 3, b: 2 },
+    });
+    expect(dxf).toContain('Startput 4.0×2.5 m');
+    expect(dxf).toContain('Eindput 3.0×2.0 m');
+    expect(dxf).toContain('Boorplan S1');
+    expect(dxf).toContain(DXF_LAGEN.traceNieuw.naam);
+  });
+
+  it('boorprofiel bevat maaiveld, boorlijn en grondwater', () => {
+    const dxf = generateBoreProfileDxf({
+      naam: 'S1',
+      maaiveld: [
+        [0, 0],
+        [80, 0],
+      ],
+      boorlijn: [
+        [0, 0],
+        [20, -5],
+        [60, -5],
+        [80, 0],
+      ],
+      grondwaterNap: -1.4,
+    });
+    expect(dxf).toContain('Boorprofiel S1');
+    expect(dxf).toContain('Grondwater -1.40 m NAP');
+    expect(dxf).toContain(DXF_LAGEN.lpLeidingAs.naam);
+    expect(dxf).toContain(DXF_LAGEN.bestaandWater.naam);
   });
 });

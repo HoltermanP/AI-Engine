@@ -15,6 +15,8 @@ export function routingSegmentsToTraceSegmenten(
     leglocatie: s.leglocatie,
     legtechniek: s.legtechniek,
     lengteM: s.lengteM,
+    kruisingen: s.kruisingen,
+    afwijkingen: s.afwijkingen,
   }));
 }
 

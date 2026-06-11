@@ -13,8 +13,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DocumentDownloadButtons } from '@/components/document-download-buttons';
 import { DocumentPreview } from '@/components/document-preview';
-import { ProjectProcessNav, ProjectProcessHint } from '@/components/project-process-nav';
-import { getDossierAction, generateDoDocumentAction } from '@/lib/actions/engineering';
+import { getDossierAction, generateDoDocumentAction, stelUitvoeringsmapSamenAction } from '@/lib/actions/engineering';
 import type { DossierItem } from '@/lib/dossier/store';
 import {
   dossierItemToHtml,
@@ -61,6 +60,7 @@ export default function DossierPage() {
   const [doContent, setDoContent] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [downloadingAll, setDownloadingAll] = useState<'pdf' | 'word' | null>(null);
+  const [mapMelding, setMapMelding] = useState<string | null>(null);
 
   const project = projectHeader?.project ?? null;
   const firstTrace = projectHeader?.firstTrace ?? null;
@@ -93,6 +93,20 @@ export default function DossierPage() {
     });
   }
 
+  function handleUitvoeringsmap() {
+    if (!firstTrace) return;
+    startTransition(async () => {
+      const result = await stelUitvoeringsmapSamenAction(traceFilter ?? firstTrace.id);
+      setMapMelding(
+        result.compleet
+          ? `${result.naam} samengesteld — alle vereiste stukken aanwezig.`
+          : `${result.naam} samengesteld — nog aan te vullen: ${result.ontbrekend.length} onderdeel/onderdelen (zie de map).`
+      );
+      const fresh = await getDossierAction(projectId, traceFilter ?? undefined);
+      setItems(fresh);
+    });
+  }
+
   async function handleDownloadAllPdf() {
     if (!project) return;
     setDownloadingAll('pdf');
@@ -115,12 +129,8 @@ export default function DossierPage() {
 
   return (
       <PageContainer>
-        <div className="mb-4 space-y-2">
-          <ProjectProcessNav projectId={projectId} firstTraceId={firstTrace?.id} />
-          <ProjectProcessHint projectId={projectId} />
-        </div>
         <PageHero
-          eyebrow="Stap 4 · Dossier"
+          eyebrow="Dossier"
           title={project?.naam ?? 'Onbekend project'}
           subtitle={`Alle documenten, tekeningen, rapporten en berekeningen${traceFilter ? ` voor tracé ${traceFilter}` : ''}.`}
           backLink={{ href: `/project/${projectId}`, label: 'Terug naar projectoverzicht' }}
@@ -152,6 +162,15 @@ export default function DossierPage() {
                 {isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <FileText className="mr-1 h-3 w-3" />}
                 DO-document opstellen
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleUitvoeringsmap}
+                disabled={isPending || !firstTrace}
+              >
+                <FolderArchive className="mr-1 h-3 w-3" />
+                Uitvoeringsmap samenstellen
+              </Button>
               {doMarkdown && project && (
                 <DocumentDownloadButtons
                   markdown={doMarkdown}
@@ -182,6 +201,9 @@ export default function DossierPage() {
                 </>
               )}
             </div>
+            {mapMelding && (
+              <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-1.5 text-[11px] text-emerald-800">{mapMelding}</p>
+            )}
             {doMarkdown && (
               <div className="max-h-96 overflow-auto rounded-lg border border-border bg-slate-100/50 p-4">
                 <DocumentPreview

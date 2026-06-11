@@ -5,6 +5,8 @@ export interface AnthropicCompletionOptions {
   system: string;
   prompt: string;
   maxTokens?: number;
+  /** Modeloverride, bijv. een snel model voor interactieve bewerkingen */
+  model?: string;
 }
 
 export interface AnthropicCompletionResult {
@@ -20,20 +22,24 @@ export function isAnthropicConfigured(): boolean {
 
 const ANTHROPIC_TIMEOUT_MS = 120_000;
 
+export const ANTHROPIC_NIET_GECONFIGUREERD =
+  'ANTHROPIC_API_KEY niet geconfigureerd — rapporten kunnen alleen via de AI API worden gegenereerd. Stel de key in via .env.local.';
+
 export async function anthropicComplete(
   options: AnthropicCompletionOptions
 ): Promise<AnthropicCompletionResult> {
   const config = getConnectorConfig();
   if (!isAnthropicConfigured()) {
-    return { text: '', model: 'demo', _source: 'demo' };
+    throw new Error(ANTHROPIC_NIET_GECONFIGUREERD);
   }
 
   const client = new Anthropic({
     apiKey: config.anthropicApiKey,
     timeout: ANTHROPIC_TIMEOUT_MS,
   });
+  const model = options.model ?? config.anthropicModel;
   const response = await client.messages.create({
-    model: config.anthropicModel,
+    model,
     max_tokens: options.maxTokens ?? 8192,
     system: options.system,
     messages: [{ role: 'user', content: options.prompt }],
@@ -45,15 +51,17 @@ export async function anthropicComplete(
     .join('\n')
     .trim();
 
-  return { text, model: config.anthropicModel, _source: 'live' };
+  return { text, model, _source: 'live' };
 }
 
-/** Stream tekstdeltas van Anthropic (leeg als niet geconfigureerd). */
+/** Stream tekstdeltas van Anthropic. Gooit een fout als de API niet geconfigureerd is. */
 export async function* anthropicCompleteStream(
   options: AnthropicCompletionOptions
 ): AsyncGenerator<string> {
   const config = getConnectorConfig();
-  if (!isAnthropicConfigured()) return;
+  if (!isAnthropicConfigured()) {
+    throw new Error(ANTHROPIC_NIET_GECONFIGUREERD);
+  }
 
   const client = new Anthropic({
     apiKey: config.anthropicApiKey,

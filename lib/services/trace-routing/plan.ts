@@ -1,4 +1,16 @@
-import { pointInPolygon, traceLengthM } from '@/lib/geo';
+import {
+  pointInPolygon,
+  segmentIntersectsPolygon,
+  segmentsIntersect,
+  traceLengthM,
+} from '@/lib/geo';
+import { BOOM_KRITIEK_M, BOOM_WORTELZONE_M } from './road-graph';
+import {
+  beoordeelSpoorkruising,
+  beoordeelWaterkruising,
+  beoordeelWegkruising,
+  type KruisingsBesluit,
+} from './kruising-afweging';
 import type { Leglocatie } from '@/demo/roads';
 import type { AvoiZone } from '@/demo/avoi';
 import { zoneLabel } from '@/demo/avoi';
@@ -104,20 +116,119 @@ function pathToCenterline(graph: RoadGraph, nodePath: number[]): [number, number
   return nodePath.map((id) => [graph.nodes[id].x, graph.nodes[id].y] as [number, number]);
 }
 
-function segmentCrossesBuildings(
+function richtingsveranderingDeg(
+  a: [number, number],
+  b: [number, number],
+  c: [number, number]
+): number {
+  const v1 = Math.atan2(b[1] - a[1], b[0] - a[0]);
+  const v2 = Math.atan2(c[1] - b[1], c[0] - b[0]);
+  let diff = Math.abs(v2 - v1) * (180 / Math.PI);
+  if (diff > 180) diff = 360 - diff;
+  return diff;
+}
+
+function afstandTotSegment(
+  px: number,
+  py: number,
   ax: number,
   ay: number,
   bx: number,
-  by: number,
+  by: number
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/**
+ * Verwijder zigzag-spikes: scherpe korte uitwijkingen die ontstaan door ruwe
+ * BGT-centerlines en knoop-merging. Een punt vervalt alleen als de directe
+ * verbinding tussen zijn buren geen pand doorsnijdt.
+ */
+function verwijderSpikes(
+  line: [number, number][],
   pandPolygonen: [number, number][][]
-): boolean {
-  const midX = (ax + bx) / 2;
-  const midY = (ay + by) / 2;
-  for (const pand of pandPolygonen) {
-    if (pointInPolygon(midX, midY, pand)) return true;
-    if (pointInPolygon(ax, ay, pand) || pointInPolygon(bx, by, pand)) return true;
+): [number, number][] {
+  let huidige = line;
+  for (let ronde = 0; ronde < 8; ronde++) {
+    if (huidige.length < 3) break;
+    const volgende: [number, number][] = [huidige[0]];
+    let verwijderd = false;
+
+    for (let i = 1; i < huidige.length - 1; i++) {
+      const a = volgende[volgende.length - 1];
+      const b = huidige[i];
+      const c = huidige[i + 1];
+      const hoek = richtingsveranderingDeg(a, b, c);
+      const bypassLengte = dist(a, c);
+      const uitwijking = afstandTotSegment(b[0], b[1], a[0], a[1], c[0], c[1]);
+
+      const isSpike = hoek > 45 && bypassLengte < 90 && uitwijking < 30;
+      if (isSpike) {
+        let veilig = true;
+        for (const pand of pandPolygonen) {
+          if (segmentIntersectsPolygon(a[0], a[1], c[0], c[1], pand)) {
+            veilig = false;
+            break;
+          }
+        }
+        if (veilig) {
+          verwijderd = true;
+          continue; // b overslaan
+        }
+      }
+      volgende.push(b);
+    }
+    volgende.push(huidige[huidige.length - 1]);
+    huidige = volgende;
+    if (!verwijderd) break;
   }
-  return false;
+  return huidige;
+}
+
+/** Douglas-Peucker met kleine tolerantie: haalt micro-ruis uit BGT-lijnen. */
+function simplifyLine(line: [number, number][], toleranceM = 1.5): [number, number][] {
+  if (line.length < 3) return line;
+  const keep = new Array<boolean>(line.length).fill(false);
+  keep[0] = true;
+  keep[line.length - 1] = true;
+  const stack: [number, number][] = [[0, line.length - 1]];
+
+  while (stack.length) {
+    const [start, eind] = stack.pop()!;
+    let maxD = 0;
+    let maxIdx = -1;
+    for (let i = start + 1; i < eind; i++) {
+      const d = afstandTotSegment(
+        line[i][0],
+        line[i][1],
+        line[start][0],
+        line[start][1],
+        line[eind][0],
+        line[eind][1]
+      );
+      if (d > maxD) {
+        maxD = d;
+        maxIdx = i;
+      }
+    }
+    if (maxD > toleranceM && maxIdx > 0) {
+      keep[maxIdx] = true;
+      stack.push([start, maxIdx], [maxIdx, eind]);
+    }
+  }
+  return line.filter((_, i) => keep[i]);
+}
+
+function gladdeRoute(
+  line: [number, number][],
+  ctx: RoutingContext
+): [number, number][] {
+  return simplifyLine(verwijderSpikes(line, ctx.pandPolygonen), 1.5);
 }
 
 function routeCrossesBuildings(
@@ -125,15 +236,25 @@ function routeCrossesBuildings(
   pandPolygonen: [number, number][][]
 ): boolean {
   if (pandPolygonen.length === 0 || line.length < 2) return false;
-  for (const [x, y] of line) {
-    for (const pand of pandPolygonen) {
-      if (pointInPolygon(x, y, pand)) return true;
-    }
-  }
+  // Echte segment-polygoon-intersectie: ook hoeken van panden tellen als doorsnijding
   for (let i = 1; i < line.length; i++) {
     const [x1, y1] = line[i - 1];
     const [x2, y2] = line[i];
-    if (segmentCrossesBuildings(x1, y1, x2, y2, pandPolygonen)) return true;
+    const minX = Math.min(x1, x2) - 50;
+    const maxX = Math.max(x1, x2) + 50;
+    const minY = Math.min(y1, y2) - 50;
+    const maxY = Math.max(y1, y2) + 50;
+    for (const pand of pandPolygonen) {
+      let inBbox = false;
+      for (const [px, py] of pand) {
+        if (px >= minX && px <= maxX && py >= minY && py <= maxY) {
+          inBbox = true;
+          break;
+        }
+      }
+      if (!inBbox) continue;
+      if (segmentIntersectsPolygon(x1, y1, x2, y2, pand)) return true;
+    }
   }
   return false;
 }
@@ -205,7 +326,7 @@ function tryRouteBetweenNodes(
   if (!path || path.length < 2) {
     return failedRoute();
   }
-  const built = buildRouteFromPath(graph, path, false);
+  const built = buildRouteFromPath(graph, path, false, ctx);
   if (routeCrossesBuildings(built.centerline, ctx.pandPolygonen)) {
     return failedRoute();
   }
@@ -294,7 +415,7 @@ function routeChainedMidpoints(
   }
 
   return {
-    centerline: densifyLine(mergedLine),
+    centerline: densifyLine(gladdeRoute(mergedLine, ctx)),
     roadNaam,
     fallback: false,
     nodePath,
@@ -304,19 +425,21 @@ function routeChainedMidpoints(
 function buildRouteFromPath(
   graph: RoadGraph,
   path: number[],
-  fallback: boolean
+  fallback: boolean,
+  ctx: RoutingContext
 ): {
   centerline: [number, number][];
   roadNaam: string;
   fallback: boolean;
   nodePath: number[];
 } {
-  const centerline = densifyLine(pathToCenterline(graph, path));
+  const centerline = densifyLine(gladdeRoute(pathToCenterline(graph, path), ctx));
   const edgeRoads = new Map<string, number>();
   for (let i = 1; i < path.length; i++) {
     const fromId = path[i - 1];
     const toId = path[i];
-    const edge = graph.edges.find((e) => e.from === fromId && e.to === toId);
+    const adj = graph.adjacency.get(fromId)?.find((n) => n.to === toId);
+    const edge = adj ? graph.edges[adj.edgeIdx] : undefined;
     if (edge && edge.roadNaam !== 'Kruising') {
       edgeRoads.set(edge.roadNaam, (edgeRoads.get(edge.roadNaam) ?? 0) + edge.lengthM);
     }
@@ -340,59 +463,165 @@ function waterBreedte(coords: [number, number][]): number {
   return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
 }
 
-function detectCrossings(
+/** Hoek tussen twee segmentrichtingen in graden (0–90). */
+function kruisingshoekDeg(
+  a1: [number, number],
+  a2: [number, number],
+  b1: [number, number],
+  b2: [number, number]
+): number {
+  const v1x = a2[0] - a1[0];
+  const v1y = a2[1] - a1[1];
+  const v2x = b2[0] - b1[0];
+  const v2y = b2[1] - b1[1];
+  const l1 = Math.hypot(v1x, v1y);
+  const l2 = Math.hypot(v2x, v2y);
+  if (l1 === 0 || l2 === 0) return 0;
+  const cos = Math.abs((v1x * v2x + v1y * v2y) / (l1 * l2));
+  return (Math.acos(Math.min(1, cos)) * 180) / Math.PI;
+}
+
+/**
+ * Echt snijpunt tussen de route en een andere lijn. Alleen transversale
+ * kruisingen tellen: voldoende hoek en het snijpunt in het inwendige van het
+ * routesegment (zo telt parallel volgen of afslaan op een kruispunt niet mee).
+ */
+function vindKruisingspunt(
   line: [number, number][],
-  ctx: RoutingContext
+  other: [number, number][],
+  minHoekDeg: number,
+  interieurMarge: number
+): [number, number] | null {
+  for (let i = 1; i < line.length; i++) {
+    const a1 = line[i - 1];
+    const a2 = line[i];
+    for (let j = 1; j < other.length; j++) {
+      const pt = segmentsIntersect(a1, a2, other[j - 1], other[j]);
+      if (!pt) continue;
+      const segLen = dist(a1, a2);
+      if (segLen === 0) continue;
+      const t = dist(a1, pt) / segLen;
+      if (t < interieurMarge || t > 1 - interieurMarge) continue;
+      if (kruisingshoekDeg(a1, a2, other[j - 1], other[j]) < minHoekDeg) continue;
+      return pt;
+    }
+  }
+  return null;
+}
+
+function besluitNaarCrossing(
+  type: RouteCrossing['type'],
+  naam: string,
+  besluit: KruisingsBesluit,
+  punt: [number, number],
+  breedteM?: number
+): RouteCrossing {
+  return {
+    type,
+    naam,
+    breedteM,
+    legtechniek: besluit.legtechniek,
+    normReferentie: besluit.normReferentie,
+    methode: besluit.methode,
+    methodeLabel: besluit.methodeLabel,
+    beheerder: besluit.beheerder,
+    vergunning: besluit.vergunning,
+    afweging: besluit.afweging,
+    x: Math.round(punt[0] * 10) / 10,
+    y: Math.round(punt[1] * 10) / 10,
+  };
+}
+
+export function detectCrossings(
+  line: [number, number][],
+  ctx: RoutingContext,
+  volgWegNaam?: string
 ): RouteCrossing[] {
   const crossings: RouteCrossing[] = [];
+  const gezien = new Set<string>();
 
+  // Watergangen: echte doorsnijding van de waterlijn (afweging per breedte)
   for (const water of ctx.watergangen) {
     if (water.coordinates.length < 2) continue;
-    const midIdx = Math.floor(line.length / 2);
-    const [mx, my] = line[midIdx] ?? line[0];
-    const wx = water.coordinates.reduce((s, [x]) => s + x, 0) / water.coordinates.length;
-    const wy = water.coordinates.reduce((s, [, y]) => s + y, 0) / water.coordinates.length;
-    if (dist([mx, my], [wx, wy]) > 80) continue;
+    const punt = vindKruisingspunt(line, water.coordinates, 20, 0.02);
+    if (!punt) continue;
+    const key = `water:${water.naam}`;
+    if (gezien.has(key)) continue;
+    gezien.add(key);
 
-    const breedte = waterBreedte(water.coordinates);
-    const legtechniek = breedte > 10 ? 'hdd' : breedte > 4 ? 'persing' : 'sleufloos';
-    crossings.push({
-      type: 'water',
-      naam: water.naam,
-      breedteM: Math.round(breedte),
-      legtechniek,
-      normReferentie:
-        ctx.discipline === 'water'
-          ? 'NEN-EN 805 / Vitens onderdoorrichtlijn'
-          : 'NEN 7171 / netbeheerder HDD-eisen',
-    });
+    // Echte breedte uit het BGT-waterdeel; zonder breedte een conservatieve
+    // middencategorie (de oude bbox-schatting verwarde lengte met breedte)
+    const breedte = water.breedteM ?? 6;
+    const besluit = beoordeelWaterkruising(breedte, ctx.discipline);
+    if (water.breedteM === undefined) {
+      besluit.afweging.push('Breedte onbekend — aanname 6 m, verifiëren bij waterschap (legger)');
+    }
+    crossings.push(besluitNaarCrossing('water', water.naam, besluit, punt, Math.round(breedte)));
   }
 
+  // Wegen: transversale doorsnijding van een andere weg dan de gevolgde corridor
+  for (const weg of ctx.roadCenterlines) {
+    if (weg.centerline.length < 2) continue;
+    if (volgWegNaam && weg.naam === volgWegNaam) continue;
+    const punt = vindKruisingspunt(line, weg.centerline, 45, 0.15);
+    if (!punt) continue;
+    const key = `weg:${weg.naam}`;
+    if (gezien.has(key)) continue;
+    gezien.add(key);
+    const besluit = beoordeelWegkruising(weg.type, weg.naam, ctx.discipline);
+    crossings.push(besluitNaarCrossing('weg', weg.naam, besluit, punt));
+  }
+
+  // Belemmeringen: spoor (ProRail) en wegen uit de belemmeringenlaag
   for (const bel of ctx.belemmeringen) {
-    if (bel.categorie !== 'weg') continue;
-    const midIdx = Math.floor(line.length / 2);
-    const [mx, my] = line[midIdx] ?? line[0];
-    let minD = Infinity;
-    for (let i = 1; i < bel.coordinates.length; i++) {
-      const [x1, y1] = bel.coordinates[i - 1];
-      const [x2, y2] = bel.coordinates[i];
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const lenSq = dx * dx + dy * dy;
-      const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((mx - x1) * dx + (my - y1) * dy) / lenSq));
-      minD = Math.min(minD, Math.hypot(mx - (x1 + t * dx), my - (y1 + t * dy)));
-    }
-    if (minD < 30) {
-      crossings.push({
-        type: 'weg',
-        naam: bel.naam ?? bel.id,
-        legtechniek: 'sleufloos',
-        normReferentie: 'Asfaltzagen / persing conform gemeente',
-      });
+    if (bel.coordinates.length < 2) continue;
+    if (bel.categorie === 'spoor') {
+      const punt = vindKruisingspunt(line, bel.coordinates, 30, 0.05);
+      if (!punt) continue;
+      const key = `spoor:${bel.naam ?? bel.id}`;
+      if (gezien.has(key)) continue;
+      gezien.add(key);
+      const besluit = beoordeelSpoorkruising(ctx.discipline);
+      crossings.push(besluitNaarCrossing('spoor', bel.naam ?? bel.id, besluit, punt));
+    } else if (bel.categorie === 'weg') {
+      const punt = vindKruisingspunt(line, bel.coordinates, 45, 0.15);
+      if (!punt) continue;
+      const naam = bel.naam ?? bel.id;
+      const key = `weg:${naam}`;
+      if (gezien.has(key) || (volgWegNaam && naam === volgWegNaam)) continue;
+      gezien.add(key);
+      const besluit = beoordeelWegkruising('gemeenteweg', naam, ctx.discipline);
+      crossings.push(besluitNaarCrossing('weg', naam, besluit, punt));
     }
   }
 
   return crossings;
+}
+
+/** Tel route-punten nabij bomen (kritieke zone en wortelzone). */
+function toetsBoomAfstand(
+  line: [number, number][],
+  bomen: RoutingContext['bomen']
+): { kritiek: number; wortelzone: number } {
+  let kritiek = 0;
+  let wortelzone = 0;
+  if (!bomen?.length) return { kritiek, wortelzone };
+
+  const geteld = new Set<number>();
+  for (const [x, y] of line) {
+    for (let b = 0; b < bomen.length; b++) {
+      if (geteld.has(b)) continue;
+      const d = Math.hypot(bomen[b].x - x, bomen[b].y - y);
+      if (d <= BOOM_KRITIEK_M) {
+        kritiek++;
+        geteld.add(b);
+      } else if (d <= BOOM_WORTELZONE_M) {
+        wortelzone++;
+        geteld.add(b);
+      }
+    }
+  }
+  return { kritiek, wortelzone };
 }
 
 function zoneToLeglocatie(zone: AvoiZone): Leglocatie {
@@ -432,27 +661,116 @@ function analyseSegment(
   volgorde: number,
   fallback: boolean
 ): RouteSegmentAnalysis {
-  const offsetLine = offsetPointAlongLine(centerline, ctx.offsetM);
-  const lengteM = Math.round(traceLengthM(offsetLine.map(([x, y]) => [x, y, ctx.diepteNap])));
-  const crossings = detectCrossings(offsetLine, ctx);
-  const legtechniek = kiesLegtechniek(crossings, ctx, fallback);
-
   const { gemeente } = getGebiedProfiel(ctx.projectId);
   const avoi = getAvoiForGemeente(gemeente);
   const ontwerp = ontwerpEisVoorDiscipline(avoi, ctx.discipline);
 
   const opmerkingen: string[] = [];
+  const afwijkingen: string[] = [];
   let score = 85;
   let zakelijkRechtVereist = false;
+
+  // Voorkeursligging: AVOI-offset naast de weg (berm). Lukt dat niet door
+  // bebouwing, dan op de hartlijn van het wegprofiel — gemotiveerde afwijking.
+  let offsetLine = offsetPointAlongLine(centerline, ctx.offsetM);
+  if (routeCrossesBuildings(offsetLine, ctx.pandPolygonen)) {
+    offsetLine = centerline;
+    afwijkingen.push(
+      `AVOI-bermligging (${zoneLabel(ontwerp.zone)}, offset ${ctx.offsetM} m) plaatselijk niet haalbaar — ` +
+        'ligging op hartlijn wegprofiel; reden: bebouwing direct langs de weg'
+    );
+  } else {
+    opmerkingen.push(`Ligging conform AVOI: ${zoneLabel(ontwerp.zone)} naast de weg`);
+  }
+
+  const lengteM = Math.round(traceLengthM(offsetLine.map(([x, y]) => [x, y, ctx.diepteNap])));
+  const crossings = detectCrossings(offsetLine, ctx, roadNaam);
+  const legtechniek = kiesLegtechniek(crossings, ctx, fallback);
 
   if (fallback) {
     score -= 25;
     opmerkingen.push('Geen wegennet gevonden — directe verbinding gebruikt');
+    afwijkingen.push('Wegvolgende ligging niet mogelijk: geen wegennet in dit gebied — directe lijn toegepast');
   } else {
     opmerkingen.push(`Tracé volgt ${roadNaam}`);
   }
 
   opmerkingen.push(`AVOI ${gemeente}: ${zoneLabel(ontwerp.zone)} (${ontwerp.leglocatieHint})`);
+
+  // Risicozones uit de datalagen: doorkruising = gemotiveerde afwijking + maatregel
+  const zoneLabels: Record<string, string> = {
+    bodem: 'bodemverontreiniging',
+    natura2000: 'Natura 2000-gebied',
+    archeologie: 'archeologische verwachtingszone',
+    nge: 'NGE-verdacht gebied',
+    flora_fauna: 'flora- en faunagebied',
+  };
+  const doorkruist = new Set<string>();
+  for (const zone of ctx.risicoZones) {
+    if (zone.polygon.length < 4 || doorkruist.has(`${zone.type}:${zone.naam}`)) continue;
+    let raakt = false;
+    for (const [x, y] of offsetLine) {
+      if (pointInPolygon(x, y, zone.polygon)) {
+        raakt = true;
+        break;
+      }
+    }
+    if (!raakt) continue;
+    doorkruist.add(`${zone.type}:${zone.naam}`);
+    score -= zone.ernst === 'hoog' ? 12 : zone.ernst === 'middel' ? 7 : 3;
+    afwijkingen.push(
+      `Doorkruist ${zoneLabels[zone.type] ?? zone.type} "${zone.naam}" (risico ${zone.ernst}) — ` +
+        `geen omleiding binnen de corridor zonder grotere bezwaren; maatregel: ${zone.maatregel}`
+    );
+  }
+
+  // Dekkingseis: AVOI/netbeheerder kan strenger zijn dan de projectinput
+  if (ontwerp.minDekkingM > ctx.vereisteDekking) {
+    opmerkingen.push(
+      `Let op: AVOI ${gemeente} vereist min. ${ontwerp.minDekkingM} m dekking (project: ${ctx.vereisteDekking} m)`
+    );
+    score -= 5;
+  }
+
+  // Geleerde voorkeur: ligt het tracé grotendeels langs een referentieontwerp?
+  if (ctx.referentieTraces.length > 0 && offsetLine.length > 1) {
+    let nabij = 0;
+    for (const [x, y] of offsetLine) {
+      for (const ref of ctx.referentieTraces) {
+        let min = Infinity;
+        for (let i = 1; i < ref.length; i++) {
+          min = Math.min(min, afstandTotSegment(x, y, ref[i - 1][0], ref[i - 1][1], ref[i][0], ref[i][1]));
+          if (min < 20) break;
+        }
+        if (min < 20) {
+          nabij++;
+          break;
+        }
+      }
+    }
+    if (nabij / offsetLine.length > 0.5) {
+      opmerkingen.push('Tracé volgt geüpload referentieontwerp (geleerde voorkeurscorridor)');
+      score += 5;
+    }
+  }
+
+  // Boomafstand (bomenverordening gemeente / eisen netbeheerder)
+  const boomToets = toetsBoomAfstand(offsetLine, ctx.bomen);
+  if (boomToets.kritiek > 0) {
+    score -= 15;
+    opmerkingen.push(
+      `${boomToets.kritiek} boom/bomen binnen ${BOOM_KRITIEK_M} m van het tracé — verleggen of groeiplaatsonderzoek vereist (bomenverordening)`
+    );
+    afwijkingen.push(
+      `Minimale boomafstand (${BOOM_KRITIEK_M} m) plaatselijk niet haalbaar bij ${boomToets.kritiek} boom/bomen — ` +
+        'geen alternatieve ligging zonder grotere bezwaren; maatregel: groeiplaatsonderzoek + handmatig graven'
+    );
+  } else if (boomToets.wortelzone > 0) {
+    score -= 5;
+    opmerkingen.push(
+      `${boomToets.wortelzone} boom/bomen in wortelzone (<${BOOM_WORTELZONE_M} m) — handmatig graven met boombescherming (Handboek Bomen/CROW 500)`
+    );
+  }
 
   for (const [x, y] of offsetLine) {
     for (const pand of ctx.pandPolygonen) {
@@ -478,11 +796,17 @@ function analyseSegment(
 
   if (zakelijkRechtVereist) {
     opmerkingen.push('Privaat terrein — zakelijk recht overeenkomen met eigenaar');
+    afwijkingen.push(
+      'Ligging deels over privaat terrein — geen openbare corridor beschikbaar; ' +
+        'maatregel: zakelijk recht (opstalrecht) overeenkomen met eigenaar'
+    );
   }
 
   if (crossings.length) {
     opmerkingen.push(
-      `${crossings.length} kruising(en): ${crossings.map((k) => `${k.naam} (${k.legtechniek.replace(/_/g, ' ')})`).join(', ')}`
+      `${crossings.length} kruising(en): ${crossings
+        .map((k) => `${k.naam} — ${k.methodeLabel ?? k.legtechniek.replace(/_/g, ' ')}`)
+        .join(', ')}`
     );
   }
 
@@ -498,6 +822,7 @@ function analyseSegment(
     score,
     opmerkingen: [...new Set(opmerkingen)],
     zakelijkRechtVereist,
+    afwijkingen: [...new Set(afwijkingen)],
   };
 }
 

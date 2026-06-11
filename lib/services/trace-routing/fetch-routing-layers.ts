@@ -1,15 +1,22 @@
 import type { MapLayerData } from '@/components/trace-map';
 import type { BgtFeature } from '@/lib/connectors/pdok/bgt';
-import { fetchPdokWfs, PDOK_WFS_PATHS } from '@/lib/connectors/pdok/wfs-client';
-import { fetchPdokOgcFeatures, fetchAllPdokOgcFeatures } from '@/lib/connectors/pdok/ogc-client';
+import { fetchPdokWfsPaged, PDOK_WFS_PATHS } from '@/lib/connectors/pdok/wfs-client';
+import { fetchAllPdokOgcFeatures } from '@/lib/connectors/pdok/ogc-client';
 import type { BboxQuery } from '@/lib/connectors/types';
 import { watergangenFromBgt } from '@/lib/services/layer-derivation';
 import type { TraceWaypoint } from './types';
 
 const ROUTING_PADDING_MIN_M = 400;
 const ROUTING_PADDING_MAX_M = 900;
-const BGT_ROUTING_MAX = 2000;
-const NWB_ROUTING_LIMIT = 300;
+const NWB_ROUTING_MAX = 6000;
+
+/** Corridor-tegels: per tegel ophalen zodat lange tracés niet tegen feature-caps lopen */
+const TILE_STAP_M = 1100;
+const TILE_PAD_M = 500;
+const MAX_TILES = 10;
+const PAND_PER_TILE = 2000;
+const WEGDEEL_PER_TILE = 1500;
+const WATERDEEL_PER_TILE = 400;
 
 function lineCoords(geom: GeoJSON.Geometry): [number, number][] {
   if (geom.type === 'LineString') {
@@ -22,7 +29,13 @@ function lineCoords(geom: GeoJSON.Geometry): [number, number][] {
 }
 
 async function fetchLiveNwbForRouting(bbox: BboxQuery) {
-  const fc = await fetchPdokWfs(PDOK_WFS_PATHS.nwbWegen, 'wegvakken', bbox, NWB_ROUTING_LIMIT);
+  const fc = await fetchPdokWfsPaged(
+    PDOK_WFS_PATHS.nwbWegen,
+    'wegvakken',
+    bbox,
+    NWB_ROUTING_MAX,
+    1000
+  );
   const wegvakken = fc.features
     .filter((f) => f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString')
     .map((f) => ({
@@ -33,6 +46,117 @@ async function fetchLiveNwbForRouting(bbox: BboxQuery) {
     .filter((w) => w.coordinates.length >= 2);
   if (wegvakken.length === 0) throw new Error('Geen NWB wegvakken in bbox');
   return { wegvakken, _source: 'live' as const };
+}
+
+/**
+ * Tegels langs de waypoint-corridor. Eén grote bbox raakt bij lange tracés de
+ * feature-caps van PDOK-paginatie — dan ontbreken panden en wegdelen en kan de
+ * route door bebouwing lopen. Per tegel blijft de dichtheid behapbaar.
+ */
+function corridorTiles(waypoints: TraceWaypoint[]): BboxQuery[] {
+  const punten: { x: number; y: number }[] = [];
+  for (let i = 1; i < waypoints.length; i++) {
+    const a = waypoints[i - 1];
+    const b = waypoints[i];
+    const lengte = Math.hypot(b.x - a.x, b.y - a.y);
+    const stappen = Math.max(1, Math.ceil(lengte / TILE_STAP_M));
+    for (let s = 0; s <= stappen; s++) {
+      const t = s / stappen;
+      punten.push({ x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+    }
+  }
+
+  // Dedupe punten die in dezelfde tegel vallen
+  const tiles: BboxQuery[] = [];
+  const seen = new Set<string>();
+  for (const p of punten) {
+    const key = `${Math.round(p.x / TILE_STAP_M)}:${Math.round(p.y / TILE_STAP_M)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tiles.push({
+      minX: p.x - (TILE_STAP_M / 2 + TILE_PAD_M),
+      minY: p.y - (TILE_STAP_M / 2 + TILE_PAD_M),
+      maxX: p.x + (TILE_STAP_M / 2 + TILE_PAD_M),
+      maxY: p.y + (TILE_STAP_M / 2 + TILE_PAD_M),
+    });
+  }
+
+  if (tiles.length > MAX_TILES) {
+    // Lange corridor: tegels uitdunnen maar begin en eind behouden
+    const stap = (tiles.length - 1) / (MAX_TILES - 1);
+    const dunner: BboxQuery[] = [];
+    for (let i = 0; i < MAX_TILES; i++) {
+      dunner.push(tiles[Math.round(i * stap)]);
+    }
+    return dunner;
+  }
+  return tiles;
+}
+
+function bgtFeatureKey(f: GeoJSON.Feature): string {
+  const id = (f.properties?.['lokaal_id'] as string) ?? (f.id as string | undefined);
+  if (id) return id;
+  return JSON.stringify(f.geometry).slice(0, 120);
+}
+
+function splitTile(t: BboxQuery): BboxQuery[] {
+  const mx = (t.minX + t.maxX) / 2;
+  const my = (t.minY + t.maxY) / 2;
+  return [
+    { minX: t.minX, minY: t.minY, maxX: mx, maxY: my },
+    { minX: mx, minY: t.minY, maxX: t.maxX, maxY: my },
+    { minX: t.minX, minY: my, maxX: mx, maxY: t.maxY },
+    { minX: mx, minY: my, maxX: t.maxX, maxY: t.maxY },
+  ];
+}
+
+/**
+ * Eén tegel ophalen met verzadigingsdetectie: raakt het resultaat de cap,
+ * dan is de data afgekapt (panden ontbreken!) en splitsen we de tegel in
+ * kwadranten. Maximaal twee niveaus diep (16× de basiscapaciteit).
+ */
+async function fetchCollectionTile(
+  collection: string,
+  tile: BboxQuery,
+  perTile: number,
+  depth = 0
+): Promise<GeoJSON.Feature[]> {
+  const features = await fetchAllPdokOgcFeatures(
+    '/lv/bgt/ogc/v1',
+    collection,
+    tile,
+    Math.min(perTile, 1000),
+    perTile
+  ).catch(() => [] as GeoJSON.Feature[]);
+
+  if (features.length >= perTile && depth < 2) {
+    const sub = await Promise.all(
+      splitTile(tile).map((t) => fetchCollectionTile(collection, t, perTile, depth + 1))
+    );
+    return sub.flat();
+  }
+  return features;
+}
+
+async function fetchBgtTiled(
+  collection: string,
+  tiles: BboxQuery[],
+  perTile: number
+): Promise<GeoJSON.Feature[]> {
+  const resultaten = await Promise.all(
+    tiles.map((tile) => fetchCollectionTile(collection, tile, perTile))
+  );
+  const seen = new Set<string>();
+  const features: GeoJSON.Feature[] = [];
+  for (const batch of resultaten) {
+    for (const f of batch) {
+      const key = bgtFeatureKey(f);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      features.push(f);
+    }
+  }
+  return features;
 }
 
 async function fetchNwbForRouting(bbox: BboxQuery) {
@@ -63,6 +187,8 @@ const BGT_TYPE_MAP: Record<string, string> = {
   wegdeel: 'weg',
   waterdeel: 'water',
   pand: 'pand',
+  // Loodsen/overkappingen blokkeren net als panden
+  overigbouwwerk: 'pand',
 };
 
 function mapBgtRoutingFeature(f: GeoJSON.Feature, defaultType: string): BgtFeature {
@@ -78,33 +204,156 @@ function mapBgtRoutingFeature(f: GeoJSON.Feature, defaultType: string): BgtFeatu
   };
 }
 
-async function fetchLiveBgtForRouting(bbox: BboxQuery): Promise<BgtFeature[]> {
-  const [weg, water, pand] = await Promise.all([
-    fetchAllPdokOgcFeatures('/lv/bgt/ogc/v1', 'wegdeel', bbox, 500, BGT_ROUTING_MAX),
-    fetchAllPdokOgcFeatures('/lv/bgt/ogc/v1', 'waterdeel', bbox, 200, 400),
-    fetchAllPdokOgcFeatures('/lv/bgt/ogc/v1', 'pand', bbox, 300, 800),
+async function fetchLiveBgtForRouting(tiles: BboxQuery[]): Promise<BgtFeature[]> {
+  const [weg, water, pand, overigBouwwerk] = await Promise.all([
+    fetchBgtTiled('wegdeel', tiles, WEGDEEL_PER_TILE),
+    fetchBgtTiled('waterdeel', tiles, WATERDEEL_PER_TILE),
+    fetchBgtTiled('pand', tiles, PAND_PER_TILE),
+    // Loodsen, overkappingen e.d. — op de BRT-kaart óók bebouwing, dus blokkeren
+    fetchBgtTiled('overigbouwwerk', tiles, 600),
   ]);
 
   const features = [
     ...weg.map((f) => mapBgtRoutingFeature(f, 'weg')),
     ...water.map((f) => mapBgtRoutingFeature(f, 'water')),
     ...pand.map((f) => mapBgtRoutingFeature(f, 'pand')),
+    ...overigBouwwerk.map((f) => mapBgtRoutingFeature(f, 'pand')),
   ];
   const wegCount = features.filter((f) => f.type === 'weg').length;
   if (wegCount === 0) throw new Error('Geen BGT wegdelen in bbox');
   return features;
 }
 
-async function fetchBgtForRouting(bbox: BboxQuery): Promise<BgtFeature[]> {
+async function fetchBgtForRouting(bbox: BboxQuery, tiles: BboxQuery[]): Promise<BgtFeature[]> {
   // Pand-polygonen zijn essentieel voor blokkade — altijd live PDOK proberen
   try {
-    return await fetchLiveBgtForRouting(bbox);
+    return await fetchLiveBgtForRouting(tiles);
   } catch {
     // fallback demo
   }
   const { pdokBgtConnector } = await import('@/lib/connectors/pdok/bgt');
   const result = await pdokBgtConnector.fetch(bbox);
   return result.features;
+}
+
+const PERCELEN_PER_TILE = 800;
+
+/**
+ * BRK-percelen langs de corridor: nodig voor de publiek/privaat-afweging
+ * (zakelijk recht). Zonder live percelen viel de router terug op demo-data.
+ */
+async function fetchPercelenForRouting(
+  tiles: BboxQuery[]
+): Promise<NonNullable<MapLayerData['percelen']>> {
+  const resultaten = await Promise.all(
+    tiles.map((tile) =>
+      fetchPdokWfsPaged(
+        PDOK_WFS_PATHS.brkKadastraleKaart,
+        'Perceel',
+        tile,
+        PERCELEN_PER_TILE,
+        PERCELEN_PER_TILE
+      ).catch(() => ({ type: 'FeatureCollection', features: [] }) as GeoJSON.FeatureCollection)
+    )
+  );
+
+  const seen = new Set<string>();
+  const percelen: NonNullable<MapLayerData['percelen']> = [];
+  for (const fc of resultaten) {
+    for (const f of fc.features ?? []) {
+      if (f.geometry?.type !== 'Polygon' && f.geometry?.type !== 'MultiPolygon') continue;
+      const props = (f.properties ?? {}) as Record<string, unknown>;
+      const gemeente = (props['kadastraleGemeenteWaarde'] as string) ?? '';
+      const sectie = (props['sectie'] as string) ?? '';
+      const nummer = String(props['perceelnummer'] ?? '');
+      const id = `${gemeente}-${sectie}-${nummer}` || String(f.id ?? '');
+      if (!nummer || seen.has(id)) continue;
+      seen.add(id);
+
+      const ring =
+        f.geometry.type === 'Polygon'
+          ? (f.geometry.coordinates[0] as [number, number][])
+          : (f.geometry.coordinates[0]?.[0] as [number, number][] | undefined);
+      if (!ring || ring.length < 4) continue;
+
+      percelen.push({
+        id,
+        perceelnummer: `${sectie} ${nummer}`,
+        polygon: ring.map(([x, y]) => [x, y] as [number, number]),
+      });
+    }
+  }
+  return percelen;
+}
+
+/** Natura 2000 + vervuilde grond: risicozones voor de afweging (best effort). */
+async function fetchRisicoLagenForRouting(bbox: BboxQuery): Promise<{
+  natura2000: NonNullable<MapLayerData['natura2000']>;
+  vervuildeGrond: NonNullable<MapLayerData['vervuildeGrond']>;
+}> {
+  const [natura, bodem] = await Promise.all([
+    import('@/lib/connectors/pdok/natura2000')
+      .then((m) => m.pdokNatura2000Connector.fetch(bbox))
+      .then((r) => r.gebieden)
+      .catch(() => []),
+    import('@/lib/connectors/bro/vervuilde-grond')
+      .then((m) => m.broVervuildeGrondConnector.fetch(bbox))
+      .then((r) => r.locaties)
+      .catch(() => []),
+  ]);
+  return { natura2000: natura, vervuildeGrond: bodem };
+}
+
+async function fetchBomenForRouting(
+  tiles: BboxQuery[],
+  bbox: BboxQuery
+): Promise<{ id: string; x: number; y: number }[]> {
+  // Boomafstand is een ontwerpcriterium (groeiplaats/bomenverordening) — altijd live proberen
+  try {
+    const punten = await fetchBgtTiled('vegetatieobject_punt', tiles, 1500);
+    const bomen = punten
+      .filter((f) => f.geometry?.type === 'Point')
+      .map((f) => {
+        const [x, y] = (f.geometry as GeoJSON.Point).coordinates;
+        return { id: bgtFeatureKey(f), x, y };
+      });
+    if (bomen.length > 0) return bomen;
+  } catch {
+    // fallback connector (kan demo zijn)
+  }
+  try {
+    const { pdokBomenConnector } = await import('@/lib/connectors/pdok/bomen');
+    const result = await pdokBomenConnector.fetch(bbox);
+    return result.bomen;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Alleen bebouwing (pand + overig bouwwerk) langs een lijn ophalen — voor de
+ * pand-guard bij het opslaan van handmatig bewerkte tracés.
+ */
+export async function fetchBebouwingVoorLijn(
+  lijn: { x: number; y: number }[]
+): Promise<[number, number][][]> {
+  if (lijn.length < 2) return [];
+  const tiles = corridorTiles(lijn);
+  const [pand, overig] = await Promise.all([
+    fetchBgtTiled('pand', tiles, PAND_PER_TILE),
+    fetchBgtTiled('overigbouwwerk', tiles, 600),
+  ]);
+  const polygonen: [number, number][][] = [];
+  for (const f of [...pand, ...overig]) {
+    if (f.geometry?.type === 'Polygon') {
+      polygonen.push(f.geometry.coordinates[0] as [number, number][]);
+    } else if (f.geometry?.type === 'MultiPolygon') {
+      for (const poly of f.geometry.coordinates) {
+        polygonen.push(poly[0] as [number, number][]);
+      }
+    }
+  }
+  return polygonen.filter((p) => p.length >= 4);
 }
 
 /** Haal NWB + BGT op voor het waypoint-gebied (server-side, onafhankelijk van kaartlagen-toggle). */
@@ -116,10 +365,14 @@ export async function fetchRoutingLayerData(
   }
 
   const bbox = waypointsBbox(waypoints, ROUTING_PADDING_MIN_M);
+  const tiles = corridorTiles(waypoints);
 
-  const [nwb, bgtFeatures] = await Promise.all([
+  const [nwb, bgtFeatures, bomen, percelen, risico] = await Promise.all([
     fetchNwbForRouting(bbox),
-    fetchBgtForRouting(bbox),
+    fetchBgtForRouting(bbox, tiles),
+    fetchBomenForRouting(tiles, bbox),
+    fetchPercelenForRouting(tiles),
+    fetchRisicoLagenForRouting(bbox),
   ]);
 
   const hasLiveBgt = bgtFeatures.some((f) => f.type === 'pand');
@@ -136,6 +389,10 @@ export async function fetchRoutingLayerData(
     })),
     bgt: bgtFeatures,
     watergangen,
+    bomen,
+    percelen,
+    natura2000: risico.natura2000,
+    vervuildeGrond: risico.vervuildeGrond,
   };
 }
 
@@ -172,7 +429,10 @@ export function mergeRoutingLayerData(
     nwb: preferNwb,
     bgt,
     watergangen: (fetched.watergangen?.length ? fetched.watergangen : client.watergangen) ?? [],
-    percelen: client.percelen,
+    percelen: (fetched.percelen?.length ?? 0) >= (client.percelen?.length ?? 0)
+      ? fetched.percelen
+      : client.percelen,
     belemmeringen: client.belemmeringen,
+    bomen: (fetched.bomen?.length ? fetched.bomen : client.bomen) ?? [],
   };
 }

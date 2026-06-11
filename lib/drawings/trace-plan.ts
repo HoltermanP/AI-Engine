@@ -63,6 +63,80 @@ function segmentLabels(
     .join('\n  ');
 }
 
+/**
+ * Genummerde kruisingsmarkers (K1..Kn) op de kruisingslocaties plus een
+ * opmerkingenblok met de gekozen uitvoeringsmethode en afweging per kruising.
+ */
+function kruisingAnnotaties(
+  trace: DemoTrace,
+  tx: (x: number) => number,
+  ty: (y: number) => number,
+  blok: { x: number; y: number; maxW: number }
+): { markers: string; opmerkingen: string; aantal: number } {
+  const kruisingen = trace.segmenten.flatMap((s) => s.kruisingen ?? []);
+  const afwijkingen = [...new Set(trace.segmenten.flatMap((s) => s.afwijkingen ?? []))];
+  const metLocatie = kruisingen.filter((k) => k.x !== undefined && k.y !== undefined);
+  if (kruisingen.length === 0 && afwijkingen.length === 0) {
+    return { markers: '', opmerkingen: '', aantal: 0 };
+  }
+
+  const markers = metLocatie
+    .map((k, i) => {
+      const cx = tx(k.x!);
+      const cy = ty(k.y!);
+      return `<g><!-- Kruising K${i + 1} -->
+  <polygon points="${cx},${cy - 7} ${cx + 7},${cy} ${cx},${cy + 7} ${cx - 7},${cy}" fill="#ffffff" stroke="${TEKENING_KLEUREN.accent}" stroke-width="1.5"/>
+  <text x="${cx}" y="${cy + 2.5}" fill="${TEKENING_KLEUREN.accent}" font-size="6.5" font-family="IBM Plex Mono,monospace" text-anchor="middle" font-weight="700">K${i + 1}</text>
+</g>`;
+    })
+    .join('\n  ');
+
+  const regelHoogte = 8;
+  const items = kruisingen.slice(0, 8);
+  const afwijkingItems = afwijkingen.slice(0, 4);
+  const kruisingBlokH = items.length * (regelHoogte * 2 + 3);
+  const afwijkingBlokH =
+    afwijkingItems.length > 0 ? 12 + afwijkingItems.length * (regelHoogte + 2) : 0;
+  const blokHoogte = 14 + kruisingBlokH + afwijkingBlokH + 6;
+
+  const regels = items
+    .map((k, i) => {
+      const y0 = blok.y + 18 + i * (regelHoogte * 2 + 3);
+      const titel = `K${i + 1} · ${k.naam.slice(0, 38)} — ${k.methodeLabel ?? k.legtechniek.replace(/_/g, ' ')}`;
+      const detail = [k.afweging?.[0], k.vergunning].filter(Boolean).join(' · ');
+      return `<text x="${blok.x + 6}" y="${y0}" fill="${TEKENING_KLEUREN.tekstDonker}" font-size="6" font-family="IBM Plex Mono,monospace" font-weight="600">${titel}</text>
+  <text x="${blok.x + 6}" y="${y0 + regelHoogte}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">${detail.slice(0, 92)}</text>`;
+    })
+    .join('\n  ');
+
+  const afwijkingY = blok.y + 18 + kruisingBlokH + 4;
+  const afwijkingRegels =
+    afwijkingItems.length > 0
+      ? `<text x="${blok.x + 6}" y="${afwijkingY}" fill="${TEKENING_KLEUREN.accent}" font-size="6" font-family="IBM Plex Mono,monospace" font-weight="700">AFWIJKINGEN VAN RICHTLIJNEN (met motivatie)</text>
+  ${afwijkingItems
+    .map(
+      (a, i) =>
+        `<text x="${blok.x + 6}" y="${afwijkingY + 9 + i * (regelHoogte + 2)}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">A${i + 1} · ${a.slice(0, 100)}</text>`
+    )
+    .join('\n  ')}`
+      : '';
+
+  const meerRegel =
+    kruisingen.length > items.length
+      ? `<text x="${blok.x + 6}" y="${blok.y + blokHoogte - 4}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">… + ${kruisingen.length - items.length} overige kruisingen (zie segmentanalyse)</text>`
+      : '';
+
+  const opmerkingen = `<g><!-- Opmerkingen kruisingen en afwijkingen -->
+  <rect x="${blok.x}" y="${blok.y}" width="${blok.maxW}" height="${blokHoogte}" fill="#ffffff" fill-opacity="0.94" stroke="${TEKENING_KLEUREN.lijnLicht}" stroke-width="0.75" rx="3"/>
+  <text x="${blok.x + 6}" y="${blok.y + 10}" fill="${TEKENING_KLEUREN.tekstDonker}" font-size="6.5" font-family="IBM Plex Mono,monospace" font-weight="700">OPMERKINGEN KRUISINGEN (uitvoeringsmethode + afweging)</text>
+  ${regels}
+  ${afwijkingRegels}
+  ${meerRegel}
+</g>`;
+
+  return { markers, opmerkingen, aantal: kruisingen.length };
+}
+
 export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet[]): string {
   const w = 900;
   const h = 620;
@@ -91,8 +165,16 @@ export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet
       { label: 'Hulpraster RD', color: '#b0b0b0', dash: '2,4', strokeWidth: 0.5 },
     ],
     extra: [
-      ['Achtergrond', 'BRT PDOK standaard'],
+      ['Achtergrond', 'BGT PDOK (exacte pandcontouren)'],
       ['Legtechniek', trace.segmenten.map((s) => s.legtechniek.replace(/_/g, ' ')).join(', ')],
+      ...(trace.segmenten.some((s) => s.kruisingen?.length)
+        ? ([
+            [
+              'Kruisingen',
+              `${trace.segmenten.reduce((n, s) => n + (s.kruisingen?.length ?? 0), 0)} stuks — zie K-markeringen`,
+            ],
+          ] as [string, string][])
+        : []),
     ] as [string, string][],
   };
   const { pad, drawW, drawH } = tekeningVlak(w, h, meta);
@@ -161,6 +243,12 @@ export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet
         )
       : '';
 
+  const kruisingen = kruisingAnnotaties(trace, tx, ty, {
+    x: pad.l + 12,
+    y: pad.t + 12,
+    maxW: Math.min(330, drawW - 24),
+  });
+
   const content = `
   ${isoTekenkader(pad.l, pad.t, drawW, drawH)}
   ${topo}
@@ -168,6 +256,8 @@ export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet
   ${netLines}
   ${tracePaths}
   ${segmentLabels(trace, traceLines, tx, ty)}
+  ${kruisingen.markers}
+  ${kruisingen.opmerkingen}
   ${start ? `<circle cx="${tx(start[0])}" cy="${ty(start[1])}" r="6" fill="${trace.kleur}" stroke="#ffffff" stroke-width="2"/>
   <polygon points="${tx(start[0])},${ty(start[1]) - 10} ${tx(start[0]) - 5},${ty(start[1]) - 3} ${tx(start[0]) + 5},${ty(start[1]) - 3}" fill="${trace.kleur}"/>
   <text x="${tx(start[0]) + 10}" y="${ty(start[1]) - 10}" ${labelStyle}>Start</text>` : ''}

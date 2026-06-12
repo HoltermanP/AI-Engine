@@ -23,6 +23,29 @@ import type { LayerToggle, BasemapId } from '@/components/map-layer-panel';
 import { BASEMAP_OPTIONS } from '@/components/map-layer-panel';
 import type { DrawMode } from '@/components/map-display-controls';
 import { getTraceLines, type TraceLines } from '@/lib/trace-edit';
+import {
+  meetLengteM,
+  orthoPunt,
+  puntOpAfstand,
+  segmentMaat,
+  snapPunt,
+  type SnapType,
+} from '@/lib/map/teken-gereedschap';
+
+/** Status van het CAD-tekengereedschap voor de statusbalk onder de kaart. */
+export interface TekenStatus {
+  rdX: number;
+  rdY: number;
+  snapType?: SnapType;
+  lengteM?: number;
+  hoekDeg?: number;
+  maatBuffer?: string;
+}
+
+export interface CadOpties {
+  osnap: boolean;
+  ortho: boolean;
+}
 import { IMKL_COLORS, UTILITY_THEMA_COLORS } from '@/lib/discipline-colors';
 import type { MapViewport } from '@/lib/map/viewport-bbox';
 import { isFetchableMapLayer } from '@/lib/map/fetchable-layers';
@@ -192,8 +215,14 @@ interface TraceMapProps {
     traceLines: [number, number, number][][];
     selected: boolean;
   }[];
-  onMapClick?: (lng: number, lat: number) => void;
+  onMapClick?: (lng: number, lat: number, modifiers?: { alt: boolean }) => void;
   onTraceLinesChange?: (lines: TraceLines) => void;
+  /** CAD-tekenopties: objectsnap (F3) en ortho-modus (F8) */
+  cadOpties?: CadOpties;
+  /** Live tekenstatus (RD-cursor, segmentmaat, snap) voor de statusbalk */
+  onTekenStatus?: (status: TekenStatus | null) => void;
+  /** Meetfunctie: meetpunten in RD; de kaart tekent de meetlijn + totaal */
+  meetPunten?: { x: number; y: number }[];
   /** Netontwerp-assets (stations/moffen als punten, mantelbuizen als lijnen) — render-klaar GeoJSON */
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   /** Plaatsmodus actief: kaartkliks gaan naar onMapClick, cursor wordt crosshair */
@@ -685,6 +714,9 @@ export function TraceMap({
   onViewportChange,
   onLayerToggle,
   onLayerControlReady,
+  cadOpties,
+  onTekenStatus,
+  meetPunten = [],
   netontwerpAssets,
   plaatsModusActief = false,
   onAssetClick,
@@ -703,6 +735,14 @@ export function TraceMap({
   onAssetClickRef.current = onAssetClick;
   const onAssetVerplaatsRef = useRef(onAssetVerplaats);
   onAssetVerplaatsRef.current = onAssetVerplaats;
+  const cadOptiesRef = useRef(cadOpties);
+  cadOptiesRef.current = cadOpties;
+  const onTekenStatusRef = useRef(onTekenStatus);
+  onTekenStatusRef.current = onTekenStatus;
+  /** Laatst (gesnapte/ortho-)aangepaste cursorpositie in RD — gebruikt bij klik en maatinvoer */
+  const cadCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const maatBufferRef = useRef('');
+  const laatsteTekenStatusRef = useRef<TekenStatus | null>(null);
   const tracesRef = useRef(traces);
   tracesRef.current = traces;
   const selectedTraceIdRef = useRef(selectedTraceId);
@@ -1044,13 +1084,23 @@ export function TraceMap({
     if (!map || !mapReady) return;
 
     const onClick = (...args: unknown[]) => {
-      const e = args[0] as { lngLat: { lng: number; lat: number } };
+      const e = args[0] as {
+        lngLat: { lng: number; lat: number };
+        originalEvent?: MouseEvent;
+      };
       if ((drawModeRef.current !== 'none' || plaatsModusRef.current) && onMapClick) {
         if (skipClickRef.current) {
           skipClickRef.current = false;
           return;
         }
-        onMapClick(e.lngLat.lng, e.lngLat.lat);
+        // CAD: gebruik de gesnapte/ortho-gecorrigeerde cursorpositie
+        const cad = cadCursorRef.current;
+        if (cad && drawModeRef.current === 'draw') {
+          const [lng, lat] = rdToWgs84(cad.x, cad.y);
+          onMapClick(lng, lat, { alt: Boolean(e.originalEvent?.altKey) });
+          return;
+        }
+        onMapClick(e.lngLat.lng, e.lngLat.lat, { alt: Boolean(e.originalEvent?.altKey) });
         return;
       }
       if (!streetViewMode) return;
@@ -1152,6 +1202,232 @@ export function TraceMap({
     map.on('click', 'netontwerp-assets-circle', onAssetLayerClick);
     map.on('click', 'netontwerp-mantelbuis-line', onAssetLayerClick);
   }, [netontwerpAssets, mapReady]);
+
+  // ── CAD-tekengereedschap: rubber band, OSNAP-marker, maatinvoer, meetlijn ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const zorgVoorBronnen = () => {
+      if (!map.getSource('cad-preview')) {
+        map.addSource('cad-preview', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+          id: 'cad-preview-line',
+          type: 'line',
+          source: 'cad-preview',
+          filter: ['==', ['geometry-type'], 'LineString'],
+          paint: { 'line-color': '#2D6FE8', 'line-width': 1.5, 'line-dasharray': [3, 2] },
+        });
+        map.addLayer({
+          id: 'cad-preview-label',
+          type: 'symbol',
+          source: 'cad-preview',
+          filter: ['==', ['geometry-type'], 'Point'],
+          layout: {
+            'text-field': ['get', 'label'],
+            'text-size': 11,
+            'text-offset': [0, -1.2],
+            'text-anchor': 'bottom',
+          },
+          paint: { 'text-color': '#1d4ed8', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+        });
+      }
+      if (!map.getSource('cad-snap')) {
+        map.addSource('cad-snap', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+          id: 'cad-snap-marker',
+          type: 'circle',
+          source: 'cad-snap',
+          paint: {
+            'circle-radius': 6,
+            'circle-color': 'rgba(0,0,0,0)',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#16A34A',
+          },
+        });
+      }
+    };
+
+    const zetPreview = (features: GeoJSON.Feature[]) => {
+      (map.getSource('cad-preview') as { setData: (d: GeoJSON.FeatureCollection) => void } | undefined)
+        ?.setData({ type: 'FeatureCollection', features });
+    };
+    const zetSnap = (features: GeoJSON.Feature[]) => {
+      (map.getSource('cad-snap') as { setData: (d: GeoJSON.FeatureCollection) => void } | undefined)
+        ?.setData({ type: 'FeatureCollection', features });
+    };
+
+    const laatsteVertex = (): { x: number; y: number } | null => {
+      const trace = tracesRef.current.find((t) => t.id === selectedTraceIdRef.current);
+      if (!trace) return null;
+      const lines = getTraceLines(trace);
+      const laatste = lines[lines.length - 1]?.at(-1);
+      return laatste ? { x: laatste[0], y: laatste[1] } : null;
+    };
+
+    const onMouseMove = (...args: unknown[]) => {
+      if (drawModeRef.current !== 'draw') return;
+      const e = args[0] as { lngLat: { lng: number; lat: number } };
+      const [rdX, rdY] = wgs84ToRd(e.lngLat.lng, e.lngLat.lat);
+      const opties = cadOptiesRef.current;
+      zorgVoorBronnen();
+
+      // 1. OSNAP op alle tracégeometrie (eindpunt/vertex vóór lijn)
+      let punt = { x: rdX, y: rdY };
+      let snapType: SnapType | undefined;
+      if (opties?.osnap) {
+        const doelen = tracesRef.current.map((t) => ({ lines: getTraceLines(t) }));
+        const snap = snapPunt(rdX, rdY, doelen);
+        if (snap) {
+          punt = { x: snap.x, y: snap.y };
+          snapType = snap.type;
+        }
+      }
+      // 2. Ortho (alleen wanneer er al een vorig punt is en er niet gesnapt is)
+      const vorig = laatsteVertex();
+      if (opties?.ortho && vorig && !snapType) {
+        punt = orthoPunt(vorig, punt);
+      }
+      cadCursorRef.current = punt;
+
+      // 3. Rubber band + maatlabel
+      const features: GeoJSON.Feature[] = [];
+      let lengteM: number | undefined;
+      let hoekDeg: number | undefined;
+      if (vorig) {
+        const maat = segmentMaat(vorig, punt);
+        lengteM = maat.lengteM;
+        hoekDeg = maat.hoekDeg;
+        const [lngA, latA] = rdToWgs84(vorig.x, vorig.y);
+        const [lngB, latB] = rdToWgs84(punt.x, punt.y);
+        features.push(
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: [[lngA, latA], [lngB, latB]] },
+          },
+          {
+            type: 'Feature',
+            properties: {
+              label: `${maat.lengteM.toFixed(1)} m ∠${maat.hoekDeg.toFixed(0)}°${maatBufferRef.current ? ` · maat: ${maatBufferRef.current} m` : ''}`,
+            },
+            geometry: { type: 'Point', coordinates: [(lngA + lngB) / 2, (latA + latB) / 2] },
+          },
+        );
+      }
+      zetPreview(features);
+      if (snapType) {
+        const [lng, lat] = rdToWgs84(punt.x, punt.y);
+        zetSnap([{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [lng, lat] } }]);
+      } else {
+        zetSnap([]);
+      }
+
+      laatsteTekenStatusRef.current = {
+        rdX: punt.x,
+        rdY: punt.y,
+        snapType,
+        lengteM,
+        hoekDeg,
+        maatBuffer: maatBufferRef.current || undefined,
+      };
+      onTekenStatusRef.current?.(laatsteTekenStatusRef.current);
+    };
+
+    const emitMaatBuffer = () => {
+      const vorige = laatsteTekenStatusRef.current;
+      if (!vorige) return;
+      laatsteTekenStatusRef.current = { ...vorige, maatBuffer: maatBufferRef.current || undefined };
+      onTekenStatusRef.current?.(laatsteTekenStatusRef.current);
+    };
+
+    // Maatinvoer: typ een afstand en bevestig met Enter (AutoCAD-stijl)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (drawModeRef.current !== 'draw') return;
+      const doel = e.target as HTMLElement | null;
+      if (doel && ['INPUT', 'TEXTAREA', 'SELECT'].includes(doel.tagName)) return;
+      if (/^[0-9]$/.test(e.key) || e.key === '.' || e.key === ',') {
+        maatBufferRef.current += e.key === ',' ? '.' : e.key;
+        emitMaatBuffer();
+        e.preventDefault();
+      } else if (e.key === 'Backspace' && maatBufferRef.current) {
+        maatBufferRef.current = maatBufferRef.current.slice(0, -1);
+        emitMaatBuffer();
+        e.preventDefault();
+      } else if (e.key === 'Enter' && maatBufferRef.current) {
+        const lengte = Number(maatBufferRef.current);
+        const vorig = laatsteVertex();
+        const cursor = cadCursorRef.current;
+        if (Number.isFinite(lengte) && lengte > 0 && vorig && cursor && onMapClick) {
+          const doelPunt = puntOpAfstand(vorig, cursor, lengte);
+          const [lng, lat] = rdToWgs84(doelPunt.x, doelPunt.y);
+          onMapClick(lng, lat);
+        }
+        maatBufferRef.current = '';
+        emitMaatBuffer();
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        maatBufferRef.current = '';
+        emitMaatBuffer();
+      }
+    };
+
+    map.on('mousemove', onMouseMove);
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      map.off('mousemove', onMouseMove);
+      window.removeEventListener('keydown', onKeyDown);
+      cadCursorRef.current = null;
+      maatBufferRef.current = '';
+      if (map.getSource('cad-preview')) zetPreview([]);
+      if (map.getSource('cad-snap')) zetSnap([]);
+      onTekenStatusRef.current?.(null);
+    };
+  }, [mapReady, drawMode, onMapClick]);
+
+  // Meetfunctie: meetlijn + totaallengte
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+    if (meetPunten.length >= 1) {
+      const coords = meetPunten.map((p) => rdToWgs84(p.x, p.y));
+      if (coords.length >= 2) {
+        data.features.push({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: coords },
+        });
+        data.features.push({
+          type: 'Feature',
+          properties: { label: `Σ ${meetLengteM(meetPunten).toFixed(1)} m` },
+          geometry: { type: 'Point', coordinates: coords[coords.length - 1] },
+        });
+      }
+    }
+    if (!map.getSource('cad-meet')) {
+      if (data.features.length === 0) return;
+      map.addSource('cad-meet', { type: 'geojson', data });
+      map.addLayer({
+        id: 'cad-meet-line',
+        type: 'line',
+        source: 'cad-meet',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        paint: { 'line-color': '#9333EA', 'line-width': 2, 'line-dasharray': [4, 2] },
+      });
+      map.addLayer({
+        id: 'cad-meet-label',
+        type: 'symbol',
+        source: 'cad-meet',
+        filter: ['==', ['geometry-type'], 'Point'],
+        layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-offset': [0, -1], 'text-anchor': 'bottom' },
+        paint: { 'text-color': '#7C3AED', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+      });
+    } else {
+      (map.getSource('cad-meet') as { setData: (d: GeoJSON.FeatureCollection) => void }).setData(data);
+    }
+  }, [meetPunten, mapReady]);
 
   // Netontwerp-assets verslepen (stations/moffen) — alleen aansluitingen niet
   const assetDragRef = useRef<{ assetId: string; moved: boolean } | null>(null);

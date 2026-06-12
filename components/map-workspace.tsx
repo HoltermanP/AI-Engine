@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TraceMap, type MapLayerData, type MapNet, type MapTrace } from '@/components/trace-map-dynamic';
+import type { CadOpties, TekenStatus } from '@/components/trace-map';
+import { offsetPolyline } from '@/lib/map/teken-gereedschap';
 import { MapLayerPanel } from '@/components/map-layer-panel';
 import { MapDisplayControls, type DrawMode } from '@/components/map-display-controls';
 import type { ConnectorMode } from '@/lib/connectors/types';
@@ -169,14 +171,21 @@ export function MapWorkspace({
   const [multiLineMode, setMultiLineMode] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode>(defaultDrawMode);
 
-  /** Undo-stapel (Ctrl+Z): snapshots van de lijnen van het geselecteerde tracé. */
+  /** CAD-opties (OSNAP/ORTHO), meetfunctie en tekenstatusbalk */
+  const [cadOpties, setCadOpties] = useState<CadOpties>({ osnap: true, ortho: false });
+  const [meetPunten, setMeetPunten] = useState<{ x: number; y: number }[]>([]);
+  const [tekenStatus, setTekenStatus] = useState<TekenStatus | null>(null);
+
+  /** Undo-/redo-stapels (Ctrl+Z / Ctrl+Shift+Z): snapshots van het geselecteerde tracé. */
   const undoStackRef = useRef<TraceLines[]>([]);
+  const redoStackRef = useRef<TraceLines[]>([]);
   const pushUndo = useCallback(
     (huidigeTraces: MapTrace[]) => {
       if (!selectedTraceId) return;
       const trace = huidigeTraces.find((t) => t.id === selectedTraceId);
       if (!trace) return;
       undoStackRef.current.push(getTraceLines(trace));
+      redoStackRef.current = [];
       if (undoStackRef.current.length > 50) undoStackRef.current.shift();
     },
     [selectedTraceId],
@@ -246,23 +255,50 @@ export function MapWorkspace({
     const onKey = (e: KeyboardEvent) => {
       const doel = e.target as HTMLElement | null;
       if (doel && ['INPUT', 'TEXTAREA', 'SELECT'].includes(doel.tagName)) return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && e.shiftKey) {
+        // Redo (Ctrl/Cmd+Shift+Z)
+        const volgende = redoStackRef.current.pop();
+        if (volgende && selectedTraceId) {
+          e.preventDefault();
+          setTraces((prev) => {
+            const trace = prev.find((t) => t.id === selectedTraceId);
+            if (trace) undoStackRef.current.push(getTraceLines(trace));
+            return updateSelectedTraceLines(prev, selectedTraceId, volgende);
+          });
+        }
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         const vorige = undoStackRef.current.pop();
         if (vorige && selectedTraceId) {
           e.preventDefault();
-          setTraces((prev) => updateSelectedTraceLines(prev, selectedTraceId, vorige));
+          setTraces((prev) => {
+            const trace = prev.find((t) => t.id === selectedTraceId);
+            if (trace) redoStackRef.current.push(getTraceLines(trace));
+            return updateSelectedTraceLines(prev, selectedTraceId, vorige);
+          });
         }
-      } else if (e.key === 'Escape' && drawMode !== 'none') {
-        setDrawMode('none');
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        setCadOpties((o) => ({ ...o, osnap: !o.osnap }));
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        setCadOpties((o) => ({ ...o, ortho: !o.ortho }));
+      } else if (e.key === 'Escape') {
+        if (drawMode === 'meten' || meetPunten.length) setMeetPunten([]);
+        if (drawMode !== 'none') setDrawMode('none');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editable, selectedTraceId, drawMode, setTraces]);
+  }, [editable, selectedTraceId, drawMode, meetPunten.length, setTraces]);
 
   const handleTraceEdit = useCallback(
-    (lng: number, lat: number) => {
+    (lng: number, lat: number, modifiers?: { alt: boolean }) => {
       const [x, y] = wgs84ToRd(lng, lat);
+
+      if (drawMode === 'meten') {
+        setMeetPunten((prev) => [...prev, { x, y }]);
+        return;
+      }
 
       if (onAssetPlaats) {
         onAssetPlaats(x, y);
@@ -295,6 +331,13 @@ export function MapWorkspace({
         if (drawMode === 'edit') {
           const existing = findNearestVertex(lines, x, y);
           if (existing) {
+            // Alt+klik = punt verwijderen (CAD-conventie)
+            if (modifiers?.alt && lines[existing.lineIdx].length > 2) {
+              const zonder = lines.map((line, li) =>
+                li === existing.lineIdx ? line.filter((_, vi) => vi !== existing.vertexIdx) : line,
+              );
+              return updateSelectedTraceLines(prev, selectedTraceId, zonder);
+            }
             return prev;
           }
 
@@ -320,6 +363,23 @@ export function MapWorkspace({
       });
     },
     [selectedTraceId, drawMode, setTraces, setAutoWaypoints, pushUndo]
+  );
+
+  /** Parallel kopiëren: offset van de eerste lijn als extra lijn in het tracé. */
+  const handleOffset = useCallback(
+    (afstandM: number) => {
+      if (!selectedTraceId) return;
+      setTraces((prev) => {
+        const trace = prev.find((t) => t.id === selectedTraceId);
+        if (!trace) return prev;
+        const lines = getTraceLines(trace).filter((l) => l.length >= 2);
+        if (lines.length === 0) return prev;
+        pushUndo(prev);
+        const parallel = offsetPolyline(lines[lines.length - 1], afstandM);
+        return updateSelectedTraceLines(prev, selectedTraceId, [...lines, parallel]);
+      });
+    },
+    [selectedTraceId, setTraces, pushUndo],
   );
 
   const handleClearDraw = useCallback(() => {
@@ -353,9 +413,37 @@ export function MapWorkspace({
           onClearDraw={handleClearDraw}
           onRestoreDemo={handleRestoreDemo}
           editable={editable}
+          cadOpties={cadOpties}
+          onCadOptiesChange={setCadOpties}
+          onOffset={editable && selectedTraceId ? handleOffset : undefined}
         />
       </div>
-      <div className="min-h-[280px] min-w-0 flex-1 lg:min-h-0">
+      <div className="relative min-h-[280px] min-w-0 flex-1 lg:min-h-0">
+        {(drawMode !== 'none' || tekenStatus) && (
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 flex items-center gap-3 bg-slate-900/85 px-3 py-1 font-mono text-[10px] text-slate-200">
+            <span>
+              {tekenStatus
+                ? `X ${tekenStatus.rdX.toFixed(1)}  Y ${tekenStatus.rdY.toFixed(1)}`
+                : 'RD —'}
+            </span>
+            {tekenStatus?.lengteM !== undefined && (
+              <span className="text-sky-300">
+                L {tekenStatus.lengteM.toFixed(1)} m ∠{tekenStatus.hoekDeg?.toFixed(0)}°
+              </span>
+            )}
+            {tekenStatus?.maatBuffer && (
+              <span className="text-amber-300">maat: {tekenStatus.maatBuffer} m ⏎</span>
+            )}
+            {tekenStatus?.snapType && (
+              <span className="text-emerald-300">SNAP {tekenStatus.snapType}</span>
+            )}
+            <span className="ml-auto flex gap-2">
+              <span className={cadOpties.osnap ? 'text-emerald-300' : 'opacity-40'}>OSNAP</span>
+              <span className={cadOpties.ortho ? 'text-emerald-300' : 'opacity-40'}>ORTHO</span>
+              <span className="opacity-60">{drawMode.toUpperCase()}</span>
+            </span>
+          </div>
+        )}
         <TraceMap
           traces={traces}
           bestaandNet={bestaandNet}
@@ -378,6 +466,9 @@ export function MapWorkspace({
           routeAlternatives={routeAlternatives}
           onMapClick={handleTraceEdit}
           onTraceLinesChange={handleTraceLinesChange}
+          cadOpties={cadOpties}
+          onTekenStatus={setTekenStatus}
+          meetPunten={meetPunten}
           netontwerpAssets={netontwerpAssets}
           plaatsModusActief={Boolean(onAssetPlaats)}
           onAssetClick={onAssetClick}

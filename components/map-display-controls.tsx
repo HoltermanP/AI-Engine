@@ -2,9 +2,11 @@
 
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { GitBranch, Minus, Pencil, Plus, RotateCcw, Trash2, Wand2 } from 'lucide-react';
+import { Copy, GitBranch, Magnet, Minus, Pencil, Plus, RotateCcw, Ruler, Trash2, Wand2 } from 'lucide-react';
+import { useState } from 'react';
+import type { CadOpties } from '@/components/trace-map';
 
-export type DrawMode = 'none' | 'draw' | 'edit' | 'auto';
+export type DrawMode = 'none' | 'draw' | 'edit' | 'auto' | 'meten';
 
 interface MapDisplayControlsProps {
   traceLineWidth: number;
@@ -16,6 +18,11 @@ interface MapDisplayControlsProps {
   onClearDraw?: () => void;
   onRestoreDemo?: () => void;
   editable?: boolean;
+  /** CAD-opties: objectsnap (F3) en ortho (F8) */
+  cadOpties?: CadOpties;
+  onCadOptiesChange?: (opties: CadOpties) => void;
+  /** Parallel kopiëren (offset) van het geselecteerde tracé */
+  onOffset?: (afstandM: number) => void;
 }
 
 export function MapDisplayControls({
@@ -28,7 +35,11 @@ export function MapDisplayControls({
   onClearDraw,
   onRestoreDemo,
   editable = true,
+  cadOpties,
+  onCadOptiesChange,
+  onOffset,
 }: MapDisplayControlsProps) {
+  const [offsetAfstand, setOffsetAfstand] = useState('2');
   return (
     <div className="space-y-3 border-t border-border pt-3">
       <p className="text-xs font-medium text-foreground">Tracéweergave</p>
@@ -106,6 +117,15 @@ export function MapDisplayControls({
             >
               <Pencil className="h-3 w-3" /> Wijzigen
             </button>
+            <button
+              type="button"
+              onClick={() => onDrawModeChange(drawMode === 'meten' ? 'none' : 'meten')}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] ${
+                drawMode === 'meten' ? 'bg-[#9333EA] text-white' : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              <Ruler className="h-3 w-3" /> Meten
+            </button>
             {onClearDraw && (
               <button
                 type="button"
@@ -143,7 +163,62 @@ export function MapDisplayControls({
           {drawMode === 'draw' && (
             <p className="text-[10px] text-muted-foreground">
               Bij starten wordt het bestaande tracé leeggemaakt voor een nieuwe tekening.
+              Typ een getal + Enter voor exacte maatinvoer.
             </p>
+          )}
+          {drawMode === 'meten' && (
+            <p className="text-[10px] text-[#9333EA]">
+              Klik meetpunten op de kaart; de totaallengte verschijnt bij het laatste punt. Esc wist de meting.
+            </p>
+          )}
+
+          {cadOpties && onCadOptiesChange && (
+            <div className="flex flex-wrap gap-1 border-t border-border pt-2">
+              <button
+                type="button"
+                title="Objectsnap: snap op eind-/hoekpunten en lijnen (F3)"
+                onClick={() => onCadOptiesChange({ ...cadOpties, osnap: !cadOpties.osnap })}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-mono ${
+                  cadOpties.osnap ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                <Magnet className="h-3 w-3" /> OSNAP F3
+              </button>
+              <button
+                type="button"
+                title="Ortho-modus: richtingen in stappen van 45° (F8)"
+                onClick={() => onCadOptiesChange({ ...cadOpties, ortho: !cadOpties.ortho })}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-mono ${
+                  cadOpties.ortho ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                ∟ ORTHO F8
+              </button>
+            </div>
+          )}
+
+          {onOffset && (
+            <div className="flex items-center gap-1.5 border-t border-border pt-2">
+              <Copy className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <input
+                type="number"
+                step="0.5"
+                min="0.5"
+                value={offsetAfstand}
+                onChange={(e) => setOffsetAfstand(e.target.value)}
+                className="w-14 rounded border border-border bg-background px-1.5 py-0.5 text-[10px]"
+                aria-label="Offset-afstand in meters"
+              />
+              <span className="text-[10px] text-muted-foreground">m</span>
+              <button
+                type="button"
+                onClick={() => onOffset(Number(offsetAfstand.replace(',', '.')) || 2)}
+                className="rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground"
+                title="Parallelle lijn naast het geselecteerde tracé (offset)"
+              >
+                Parallel kopiëren
+              </button>
+            </div>
           )}
         </div>
       )}

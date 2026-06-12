@@ -199,6 +199,8 @@ interface TraceMapProps {
   /** Plaatsmodus actief: kaartkliks gaan naar onMapClick, cursor wordt crosshair */
   plaatsModusActief?: boolean;
   onAssetClick?: (assetId: string) => void;
+  /** Asset versleept naar nieuwe positie (RD-coördinaten) */
+  onAssetVerplaats?: (assetId: string, x: number, y: number) => void;
   onViewportChange?: (viewport: MapViewport) => void;
   onLayerToggle?: (layerId: string, visible: boolean) => void;
   onLayerControlReady?: (props: {
@@ -686,6 +688,7 @@ export function TraceMap({
   netontwerpAssets,
   plaatsModusActief = false,
   onAssetClick,
+  onAssetVerplaats,
 }: TraceMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -698,6 +701,8 @@ export function TraceMap({
   plaatsModusRef.current = plaatsModusActief;
   const onAssetClickRef = useRef(onAssetClick);
   onAssetClickRef.current = onAssetClick;
+  const onAssetVerplaatsRef = useRef(onAssetVerplaats);
+  onAssetVerplaatsRef.current = onAssetVerplaats;
   const tracesRef = useRef(traces);
   tracesRef.current = traces;
   const selectedTraceIdRef = useRef(selectedTraceId);
@@ -1147,6 +1152,58 @@ export function TraceMap({
     map.on('click', 'netontwerp-assets-circle', onAssetLayerClick);
     map.on('click', 'netontwerp-mantelbuis-line', onAssetLayerClick);
   }, [netontwerpAssets, mapReady]);
+
+  // Netontwerp-assets verslepen (stations/moffen) — alleen aansluitingen niet
+  const assetDragRef = useRef<{ assetId: string; moved: boolean } | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !onAssetVerplaats) return;
+
+    const onMouseDown = (...args: unknown[]) => {
+      if (!map.getLayer('netontwerp-assets-circle')) return;
+      const e = args[0] as { point: { x: number; y: number }; preventDefault: () => void };
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ['netontwerp-assets-circle'],
+      });
+      const props = features[0]?.properties as Record<string, unknown> | undefined;
+      if (!props?.id || props.assetType === 'aansluiting') return;
+      e.preventDefault();
+      assetDragRef.current = { assetId: String(props.id), moved: false };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = 'grabbing';
+    };
+
+    const onMouseMove = (...args: unknown[]) => {
+      const drag = assetDragRef.current;
+      if (!drag) return;
+      drag.moved = true;
+      const e = args[0] as { lngLat: { lng: number; lat: number } };
+      const [x, y] = wgs84ToRd(e.lngLat.lng, e.lngLat.lat);
+      onAssetVerplaatsRef.current?.(drag.assetId, x, y);
+    };
+
+    const finishDrag = () => {
+      const drag = assetDragRef.current;
+      if (!drag) return;
+      assetDragRef.current = null;
+      map.dragPan.enable();
+      if (drag.moved) skipClickRef.current = true;
+      map.getCanvas().style.cursor = '';
+    };
+
+    map.on('mousedown', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', finishDrag);
+    window.addEventListener('mouseup', finishDrag);
+    return () => {
+      map.off('mousedown', onMouseDown);
+      map.off('mousemove', onMouseMove);
+      map.off('mouseup', finishDrag);
+      window.removeEventListener('mouseup', finishDrag);
+      assetDragRef.current = null;
+      map.dragPan.enable();
+    };
+  }, [mapReady, onAssetVerplaats]);
 
   const tracePopupHandlerRef = useRef<((...args: unknown[]) => void) | null>(null);
 

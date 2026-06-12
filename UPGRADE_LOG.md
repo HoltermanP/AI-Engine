@@ -71,3 +71,9 @@
 - Asset-verslepen (drag) op de kaart; nu verwijderen + opnieuw plaatsen.
 - MS-ringstructuur (meerdere stations in één ring doorverbinden) is nog niet gemodelleerd; eenlijnschema gaat uit van ring-in/ring-uit per station.
 - Netontwerp-deliverables koppelen aan dossier/doc-codes.
+
+### Nachtrun-vervolg (batch 3, afgerond 06:36)
+- **Asset-drag op de kaart**: stations vrij verslepen, moffen blijven op hun tracé gesnapt (re-snap naar chainage); zelfde interactiepatroon als de bestaande vertex-drag (TraceMap `onAssetVerplaats`, alleen actief buiten de teken-stap).
+- **Dossier-koppeling**: stationsontwerp-tekeningen (eenlijn + plattegrond) en werktekeningen worden bij generatie geregistreerd in het projectdossier (`saveTekeningenToDossier`).
+- **IEC 60287 in de UI** (batch 2): vol thermisch model als extra berekening bij elke MS-kabelkeuze; MS-ringvolgorde langs het tracé in stap 4.
+- Browser-regressie volledige flow stap 3→6 (kabel kiezen → stations overnemen → eenlijn/plattegrond → moffen → werktekening): geen consolefouten.

@@ -198,6 +198,38 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
     setGeselecteerdAssetId((prev) => (prev === assetId ? null : assetId));
   }, []);
 
+  /** Slepen: stations vrij verplaatsen; moffen blijven op hun tracé gesnapt. */
+  const handleAssetVerplaats = useCallback(
+    (assetId: string, x: number, y: number) => {
+      setOntwerp((prev) => ({
+        ...prev,
+        assets: prev.assets.map((a) => {
+          if (a.id !== assetId) return a;
+          if (a.positie.binding === 'punt') {
+            return { ...a, positie: { binding: 'punt', x, y }, bron: 'handmatig' as const };
+          }
+          if (a.positie.binding === 'chainage') {
+            const lines = traceLinesById[a.positie.traceId];
+            if (!lines) return a;
+            const snap = snapNaarLijnen(lines, x, y, 250);
+            if (!snap) return a;
+            return {
+              ...a,
+              bron: 'handmatig' as const,
+              positie: {
+                ...a.positie,
+                lijnIndex: snap.lijnIndex,
+                chainageM: Math.round(snap.chainageM * 10) / 10,
+              },
+            };
+          }
+          return a;
+        }),
+      }));
+    },
+    [traceLinesById],
+  );
+
   const geselecteerdAsset = useMemo(
     () => ontwerp.assets.find((a) => a.id === geselecteerdAssetId) ?? null,
     [ontwerp.assets, geselecteerdAssetId],
@@ -267,6 +299,7 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
             netontwerpAssets={netontwerpAssets}
             onAssetPlaats={plaatsModus ? handleAssetPlaats : undefined}
             onAssetClick={handleAssetClick}
+            onAssetVerplaats={kaartBewerkbaar ? undefined : handleAssetVerplaats}
           />
         </div>
 

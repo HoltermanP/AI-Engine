@@ -25,6 +25,7 @@ import { calcElektraMs } from '@/lib/calc/elektra-ms';
 import { berekenAmpacity, type GeleiderDoorsnede } from '@/lib/calc/thermisch';
 import type { CalcResult } from '@/lib/calc/types';
 import type { TraceLines } from '@/lib/trace-edit';
+import { saveTekeningenToDossier } from '@/lib/dossier/store';
 import { generateStationEenlijn } from '@/lib/drawings/station-eenlijn';
 import { generateStationPlattegrond } from '@/lib/drawings/station-plattegrond';
 import { generateWerktekening } from '@/lib/drawings/werktekening';
@@ -328,6 +329,9 @@ export async function genereerStationTekeningenAction(
       },
     );
   }
+  if (resultaten.length > 0) {
+    saveTekeningenToDossier(ontwerp.projectId, trace.id, resultaten);
+  }
   return resultaten;
 }
 
@@ -339,12 +343,14 @@ export async function genereerWerktekeningenAction(
   for (const traceId of ontwerp.traceIds) {
     const trace = getDemoTrace(traceId);
     if (!trace) continue;
-    resultaten.push({
+    const tekening: DrawingResult = {
       type: 'werktekening',
       label: `Werktekening ${trace.code}`,
       svg: generateWerktekening(trace, ontwerp.assets),
       formaat: 'svg',
-    });
+    };
+    resultaten.push(tekening);
+    saveTekeningenToDossier(ontwerp.projectId, trace.id, [tekening]);
   }
   return resultaten;
 }

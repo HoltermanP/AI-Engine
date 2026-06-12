@@ -49,6 +49,7 @@ interface MapWorkspaceProps {
   /** Plaatsmodus: kaartklik plaatst een asset (RD-coördinaten) i.p.v. tracé-bewerking */
   onAssetPlaats?: (x: number, y: number) => void;
   onAssetClick?: (assetId: string) => void;
+  onAssetVerplaats?: (assetId: string, x: number, y: number) => void;
 }
 
 function emptyTraceLine(): TraceLines {
@@ -112,6 +113,7 @@ export function MapWorkspace({
   netontwerpAssets,
   onAssetPlaats,
   onAssetClick,
+  onAssetVerplaats,
 }: MapWorkspaceProps) {
   const lazy = useLazyMapLayers({ traceId });
   const layerData = useMemo(
@@ -342,6 +344,7 @@ export function MapWorkspace({
           netontwerpAssets={netontwerpAssets}
           plaatsModusActief={Boolean(onAssetPlaats)}
           onAssetClick={onAssetClick}
+          onAssetVerplaats={onAssetVerplaats}
         />
       </div>
     </div>

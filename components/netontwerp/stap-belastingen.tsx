@@ -1,14 +1,24 @@
 'use client';
 
+import { useState } from 'react';
 import type { Aansluiting, AansluitingType, Netontwerp } from '@/lib/netontwerp/types';
 import { AANSLUITING_TYPE_LABELS } from '@/lib/netontwerp/types';
-import { belastingKVA, totaalBelastingKVA, stroomUitKVA } from '@/lib/netontwerp/belastingen';
+import {
+  belastingKVA,
+  totaalBelastingKVA,
+  stroomUitKVA,
+  parseAansluitingenCsv,
+  type CsvParseResultaat,
+} from '@/lib/netontwerp/belastingen';
+import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { ClipboardPaste, Trash2 } from 'lucide-react';
 
 interface StapBelastingenProps {
   ontwerp: Netontwerp;
   onOntwerpChange: (ontwerp: Netontwerp) => void;
+  /** Plaatst geïmporteerde rijen gespreid langs het tracé (workspace levert posities) */
+  onBulkImport?: (rijen: CsvParseResultaat['rijen']) => void;
 }
 
 function NumInput({
@@ -36,8 +46,26 @@ function NumInput({
   );
 }
 
-export function StapBelastingen({ ontwerp, onOntwerpChange }: StapBelastingenProps) {
+export function StapBelastingen({ ontwerp, onOntwerpChange, onBulkImport }: StapBelastingenProps) {
   const groei = ontwerp.uitgangspunten.groeifactor;
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [csvTekst, setCsvTekst] = useState('');
+
+  const importeerCsv = () => {
+    const { rijen, fouten } = parseAansluitingenCsv(csvTekst);
+    if (rijen.length === 0) {
+      toast('fout', 'Geen geldige regels gevonden', fouten[0] ?? 'Verwacht formaat: naam;type;aantal[;kVA;g]');
+      return;
+    }
+    onBulkImport?.(rijen);
+    setCsvOpen(false);
+    setCsvTekst('');
+    toast(
+      'succes',
+      `${rijen.length} aansluiting(en) geïmporteerd`,
+      fouten.length ? `${fouten.length} regel(s) overgeslagen — posities gespreid langs het tracé, versleep ze waar nodig` : 'Posities gespreid langs het tracé — versleep ze waar nodig',
+    );
+  };
 
   const updateAansluiting = (id: string, patch: Partial<Aansluiting>) => {
     onOntwerpChange({
@@ -128,12 +156,39 @@ export function StapBelastingen({ ontwerp, onOntwerpChange }: StapBelastingenPro
       </div>
 
       <div className="rounded-lg border border-border bg-card p-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold">Aansluitingen ({ontwerp.aansluitingen.length})</p>
-          <p className="text-[10px] text-muted-foreground">
-            Plaats nieuwe punten via het palet + kaartklik
-          </p>
+          <button
+            type="button"
+            onClick={() => setCsvOpen((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium hover:bg-muted"
+          >
+            <ClipboardPaste className="h-3 w-3" />
+            Plak uit Excel/CSV
+          </button>
         </div>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          Plaats losse punten via het palet + kaartklik, of importeer een lijst.
+        </p>
+
+        {csvOpen && (
+          <div className="mt-2 rounded-md border border-[#2D6FE8]/30 bg-[#2D6FE8]/5 p-2">
+            <p className="text-[10px] text-muted-foreground">
+              Eén regel per groep: <code className="font-mono">naam;type;aantal[;kVA;gelijktijdigheid]</code>{' '}
+              — typen: woning, utiliteit, bedrijf, laadinfra, pv
+            </p>
+            <textarea
+              value={csvTekst}
+              onChange={(e) => setCsvTekst(e.target.value)}
+              rows={5}
+              placeholder={'Fase 1 rijwoningen;woning;28;4\nSchool;utiliteit;1;50\nLaadplein;laadinfra;10;22;0,9'}
+              className="mt-1.5 w-full rounded border border-border bg-background p-2 font-mono text-[11px]"
+            />
+            <Button size="sm" className="mt-1.5 h-7 w-full text-xs" onClick={importeerCsv}>
+              Importeer aansluitingen
+            </Button>
+          </div>
+        )}
 
         {ontwerp.aansluitingen.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">

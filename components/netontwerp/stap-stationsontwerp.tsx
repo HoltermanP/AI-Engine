@@ -8,6 +8,7 @@ import {
 } from '@/lib/actions/netontwerp';
 import type { DrawingResult } from '@/lib/drawings/types';
 import { downloadSvgAsPdf } from '@/lib/export/download';
+import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Download, Loader2, PencilRuler } from 'lucide-react';
 
@@ -26,7 +27,9 @@ export function StapStationsontwerp({ ontwerp, onOntwerpChange }: StapStationson
     startTransition(async () => {
       const bijgewerkt = await genereerStationsontwerpenAction(ontwerp);
       onOntwerpChange(bijgewerkt);
-      setTekeningen(await genereerStationTekeningenAction(bijgewerkt));
+      const tek = await genereerStationTekeningenAction(bijgewerkt);
+      setTekeningen(tek);
+      toast('succes', 'Stationsontwerpen gegenereerd', `${bijgewerkt.stationsOntwerpen.length} station(s), ${tek.length} tekeningen — vastgelegd in het dossier`);
     });
   };
 

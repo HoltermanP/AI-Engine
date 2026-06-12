@@ -102,3 +102,15 @@ Tests: 176. Build groen. Browser-verificatie zonder fouten.
 - **Fix in-memory stores in Next-dev**: route- en action-bundles kunnen aparte module-instanties laden waardoor sessiedata "verdween"; alle stores (dossier, demo-overrides, netontwerp, vergunningen, sonderingen) gebruiken nu het globalThis-singleton-patroon.
 
 Tests: 177. Build groen. Browser-verificatie: status bijwerken → reload → status behouden → criterium "Alle 2 vergunningen verleend" → Startbesluit toont Verleend.
+
+## 2026-06-12 — Gebruiksvriendelijkheid: 7 workflow-verbeteringen
+
+1. **Command palette (⌘K/Ctrl+K)**: zoek en spring direct naar elk project, tracé of elke pagina (components/command-palette.tsx + zoekknop in de topbalk).
+2. **Sneltoetsen tekentool**: Ctrl/Cmd+Z = laatste tekenstap terug (undo-stapel van 50 snapshots in MapWorkspace), Esc = teken-/plaatsmodus verlaten, Delete = geselecteerd asset verwijderen (netontwerp).
+3. **Termijnbewaking** (lib/services/termijnbewaking.ts + TermijnWidget): naderende vergunningbesluiten (uit de planning, gefilterd op niet-verleende statussen), het KLIC-meldvenster (20 werkdagen vóór de eerste uitvoeringsactiviteit) en kritiek-pad-starts — op het dashboard (portfolio-breed) en de projectpagina.
+4. **Uitvoeringsmap-ZIP** (app/api/uitvoeringsmap, jszip): alle dossierstukken geordend per hoofdstuk (01-uitvoeringsmap t/m 07-rapporten) + leeswijzer met startgereedheid; downloadknop op de dossierpagina.
+5. **Toast-meldingen** (lib/toast.ts + ToastViewport in de root-layout zodat ze navigatie overleven): ringgeneratie, moffen, werktekening, stationsontwerpen, GEF-upload, boorengineering, projectaanmaak, CSV-import.
+6. **Nieuw-project-wizard**: dashboardknop → naam/gebied/opdrachtgever → project aangemaakt (demo-store, automatisch projectnummer) → direct door naar het projectoverzicht.
+7. **Bulk-invoer aansluitingen**: "Plak uit Excel/CSV" in netontwerp stap 1 (naam;type;aantal[;kVA;g], decimale komma's en kopregels ondersteund); punten worden gelijkmatig 25 m naast het tracé gespreid en zijn daarna versleepbaar.
+
+Tests: 179. Build groen (17 routes). Browser-verificatie: palette-navigatie, wizard-redirect, CSV-import met toast, ZIP-download (200, application/zip), termijnwidget op dashboard — zonder consolefouten.

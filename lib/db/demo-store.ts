@@ -68,12 +68,24 @@ export function getDemoOrganisatie() {
   return DEMO_ORGANISATIE;
 }
 
+/** In de sessie aangemaakte projecten (nieuw-project-wizard). */
+const gCreated = globalThis as unknown as {
+  __createdProjects?: Map<string, (typeof DEMO_PROJECTS)[number]>;
+};
+const createdProjects = (gCreated.__createdProjects ??= new Map());
+
+export function addDemoProject(project: (typeof DEMO_PROJECTS)[number]): void {
+  createdProjects.set(project.id, project);
+}
+
 export function getDemoProjecten() {
-  return DEMO_PROJECTS;
+  return createdProjects.size > 0
+    ? [...createdProjects.values(), ...DEMO_PROJECTS]
+    : DEMO_PROJECTS;
 }
 
 export function getDemoProject(id: string) {
-  return getDemoProjectById(id);
+  return createdProjects.get(id) ?? getDemoProjectById(id);
 }
 
 export function getDemoTraces(projectId?: string) {

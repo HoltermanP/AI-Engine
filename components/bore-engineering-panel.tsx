@@ -11,6 +11,7 @@ import { sleuflozeSegmenten } from '@/lib/bore';
 import type { DrawingResult } from '@/lib/drawings/types';
 import { runVolledigeBoorengineeringAction, uploadGefAction } from '@/lib/actions/bore-engineering';
 import { downloadSvgAsPdf } from '@/lib/export/download';
+import { toast } from '@/lib/toast';
 import { Drill, FileImage, FileUp, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface BoreEngineeringPanelProps {
@@ -44,6 +45,8 @@ export function BoreEngineeringPanel({ trace, disabled }: BoreEngineeringPanelPr
       startTransition(async () => {
         const res = await uploadGefAction(file.name, String(reader.result ?? ''));
         setGefMelding(res.ok ? `✓ ${res.melding}` : `✗ ${res.error}`);
+        if (res.ok) toast('succes', 'GEF-sondering geladen', res.melding);
+        else toast('fout', 'GEF-upload mislukt', res.error);
       });
     };
     reader.readAsText(file);
@@ -61,6 +64,7 @@ export function BoreEngineeringPanel({ trace, disabled }: BoreEngineeringPanelPr
       const res = await runVolledigeBoorengineeringAction(trace.id, selected);
       setResult(res.engineering);
       setTekeningen(res.tekeningen);
+      toast('succes', 'Boorengineering uitgewerkt', `${res.engineering.segmenten.length} segment(en), ${res.tekeningen.length} tekeningen`);
     });
   }
 

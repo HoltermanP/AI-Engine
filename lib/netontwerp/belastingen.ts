@@ -53,6 +53,66 @@ export function stroomUitKVA(kVA: number, netvlak: Netvlak, spanningMsKV = 10): 
   return (kVA * 1000) / (Math.sqrt(3) * uV);
 }
 
+const TYPE_ALIASSEN: Record<string, AansluitingType> = {
+  woning: 'woning',
+  woningen: 'woning',
+  huis: 'woning',
+  utiliteit: 'utiliteit',
+  school: 'utiliteit',
+  bedrijf: 'bedrijf',
+  bedrijven: 'bedrijf',
+  laadinfra: 'laadinfra',
+  laadpaal: 'laadinfra',
+  laadpalen: 'laadinfra',
+  pv: 'pv_park',
+  pv_park: 'pv_park',
+  zon: 'pv_park',
+};
+
+export interface CsvParseResultaat {
+  rijen: Omit<Aansluiting, 'id' | 'x' | 'y' | 'netvlak'>[];
+  fouten: string[];
+}
+
+/**
+ * Bulk-invoer uit Excel/CSV-plak: `naam;type;aantal;kVA[;gelijktijdigheid]`
+ * (scheiding mag ; , of tab). kVA en gelijktijdigheid vallen terug op de
+ * defaults van het type wanneer ze ontbreken.
+ */
+export function parseAansluitingenCsv(tekst: string): CsvParseResultaat {
+  const rijen: CsvParseResultaat['rijen'] = [];
+  const fouten: string[] = [];
+  const regels = tekst.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
+
+  const naarGetal = (v?: string) => Number((v ?? '').replace(',', '.'));
+
+  regels.forEach((regel, i) => {
+    // ; of tab heeft voorrang (laat decimale komma's intact); anders komma
+    const scheiding = /[;\t]/.test(regel) ? /[;\t]/ : /,/;
+    const velden = regel.split(scheiding).map((v) => v.trim());
+    if (i === 0 && /naam|type/i.test(velden[0]) && !/^\d/.test(velden[2] ?? '')) return; // kopregel
+    const [naam, typeRuw, aantalRuw, kvaRuw, gRuw] = velden;
+    const type = TYPE_ALIASSEN[(typeRuw ?? '').toLowerCase()] ?? null;
+    const aantal = naarGetal(aantalRuw);
+    if (!naam || !type || !Number.isFinite(aantal) || aantal <= 0) {
+      fouten.push(`Regel ${i + 1} overgeslagen: "${regel.slice(0, 60)}" (verwacht: naam;type;aantal[;kVA;g])`);
+      return;
+    }
+    const defaults = nieuweAansluitingDefaults(type);
+    const kva = naarGetal(kvaRuw);
+    const g = naarGetal(gRuw);
+    rijen.push({
+      naam,
+      type,
+      aantal: Math.round(aantal),
+      kVAPerStuk: Number.isFinite(kva) && kva > 0 ? kva : defaults.kVAPerStuk,
+      gelijktijdigheid: Number.isFinite(g) && g > 0 && g <= 1 ? g : defaults.gelijktijdigheid,
+    });
+  });
+
+  return { rijen, fouten };
+}
+
 /**
  * Maximale stranglengte (m) waarbij de spanningsval binnen de grens blijft —
  * omgekeerde van spanningsvalLsV: L = ΔUmax · S / (√3 · I · ρ · cosφ).

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk, IBM_Plex_Mono } from 'next/font/google';
 import { ConditionalClerkProvider } from '@/components/conditional-clerk-provider';
+import { ToastViewport } from '@/components/toast-viewport';
 import './globals.css';
 
 const spaceGrotesk = Space_Grotesk({
@@ -31,6 +32,7 @@ export default function RootLayout({
         className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}
       >
         {children}
+        <ToastViewport />
       </body>
     </html>
   );

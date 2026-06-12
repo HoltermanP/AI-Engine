@@ -169,6 +169,19 @@ export function MapWorkspace({
   const [multiLineMode, setMultiLineMode] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode>(defaultDrawMode);
 
+  /** Undo-stapel (Ctrl+Z): snapshots van de lijnen van het geselecteerde tracé. */
+  const undoStackRef = useRef<TraceLines[]>([]);
+  const pushUndo = useCallback(
+    (huidigeTraces: MapTrace[]) => {
+      if (!selectedTraceId) return;
+      const trace = huidigeTraces.find((t) => t.id === selectedTraceId);
+      if (!trace) return;
+      undoStackRef.current.push(getTraceLines(trace));
+      if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+    },
+    [selectedTraceId],
+  );
+
   const onLayerDataChangeRef = useRef(onLayerDataChange);
   onLayerDataChangeRef.current = onLayerDataChange;
   const lastLayerNotifyRef = useRef('');
@@ -219,10 +232,33 @@ export function MapWorkspace({
   const handleTraceLinesChange = useCallback(
     (lines: TraceLines) => {
       if (!selectedTraceId) return;
-      setTraces((prev) => updateSelectedTraceLines(prev, selectedTraceId, lines));
+      setTraces((prev) => {
+        pushUndo(prev);
+        return updateSelectedTraceLines(prev, selectedTraceId, lines);
+      });
     },
-    [selectedTraceId, setTraces]
+    [selectedTraceId, setTraces, pushUndo]
   );
+
+  // Sneltoetsen: Ctrl/Cmd+Z = laatste tekenstap terug, Esc = modus verlaten
+  useEffect(() => {
+    if (!editable) return;
+    const onKey = (e: KeyboardEvent) => {
+      const doel = e.target as HTMLElement | null;
+      if (doel && ['INPUT', 'TEXTAREA', 'SELECT'].includes(doel.tagName)) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        const vorige = undoStackRef.current.pop();
+        if (vorige && selectedTraceId) {
+          e.preventDefault();
+          setTraces((prev) => updateSelectedTraceLines(prev, selectedTraceId, vorige));
+        }
+      } else if (e.key === 'Escape' && drawMode !== 'none') {
+        setDrawMode('none');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editable, selectedTraceId, drawMode, setTraces]);
 
   const handleTraceEdit = useCallback(
     (lng: number, lat: number) => {
@@ -244,6 +280,7 @@ export function MapWorkspace({
         const trace = prev.find((t) => t.id === selectedTraceId);
         if (!trace) return prev;
 
+        pushUndo(prev);
         const lines = getTraceLines(trace);
         const defaultZ = lines.flat().at(-1)?.[2] ?? -0.65;
 
@@ -282,7 +319,7 @@ export function MapWorkspace({
         return prev;
       });
     },
-    [selectedTraceId, drawMode, setTraces, setAutoWaypoints]
+    [selectedTraceId, drawMode, setTraces, setAutoWaypoints, pushUndo]
   );
 
   const handleClearDraw = useCallback(() => {

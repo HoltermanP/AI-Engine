@@ -10,7 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProgressBar } from '@/components/progress-bar';
 import { getProject, getTraces, getBestaandNet } from '@/lib/db/store';
 import { bepaalStartgereedheid } from '@/lib/services/startgereedheid';
+import { bepaalTermijnSignalen } from '@/lib/services/termijnbewaking';
 import { StartUitvoeringPanel } from '@/components/start-uitvoering-panel';
+import { TermijnWidget } from '@/components/termijn-widget';
 import { deriveDeliverableStatuses } from '@/lib/process/deliverable-status';
 import { getProjectSummary, FASE_LABELS } from '@/lib/services/project-stats';
 import { DISCIPLINE_LABELS } from '@/lib/db/types';
@@ -42,6 +44,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const firstTraceId = traces[0]?.id ?? null;
   const deliverableRecords = deriveDeliverableStatuses(traces);
   const startgereedheid = bepaalStartgereedheid(id);
+  const termijnSignalen = bepaalTermijnSignalen(project).slice(0, 4);
 
   return (
       <div className="flex flex-col lg:h-[calc(100dvh-3.5rem)]">
@@ -90,6 +93,12 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
           <div className="flex-1 overflow-auto p-4">
             <StartUitvoeringPanel resultaat={startgereedheid} />
+
+            {termijnSignalen.length > 0 && (
+              <div className="mt-4">
+                <TermijnWidget signalen={termijnSignalen} />
+              </div>
+            )}
 
             <div className="mt-6 border-t border-border/60 pt-4">
               <ProjectStatusOverview summary={summary} projectId={id} />

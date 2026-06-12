@@ -137,6 +137,14 @@ export default function DossierPage() {
           footer={
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">{items.length} documenten</Badge>
+              {items.length > 0 && (
+                <a
+                  href={`/api/uitvoeringsmap?projectId=${projectId}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#2D6FE8] px-3 py-1 text-[10px] font-medium text-white transition-colors hover:bg-[#2563d4]"
+                >
+                  Download uitvoeringsmap (ZIP)
+                </a>
+              )}
               {traceFilter && (
                 <Link href={`/project/${projectId}/dossier`} className="text-xs text-[#2D6FE8] hover:underline">
                   Toon alle tracés

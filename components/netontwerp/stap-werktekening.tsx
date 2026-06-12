@@ -9,6 +9,7 @@ import {
 } from '@/lib/actions/netontwerp';
 import type { DrawingResult } from '@/lib/drawings/types';
 import { downloadSvgAsPdf } from '@/lib/export/download';
+import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { CircleDot, Download, FileSpreadsheet, FileType2, Loader2, Workflow } from 'lucide-react';
 
@@ -28,12 +29,15 @@ export function StapWerktekening({ ontwerp, onOntwerpChange }: StapWerktekeningP
     startTransition(async () => {
       const bijgewerkt = await plaatsMoffenAction(ontwerp);
       onOntwerpChange(bijgewerkt);
+      toast('succes', 'Moffen & mantelbuizen geplaatst', `${bijgewerkt.assets.filter((a) => a.type === 'mof').length} moffen · ${bijgewerkt.assets.filter((a) => a.type === 'mantelbuis').length} mantelbuizen`);
     });
   };
 
   const genereerTekeningen = () => {
     startTransition(async () => {
-      setTekeningen(await genereerWerktekeningenAction(ontwerp));
+      const resultaat = await genereerWerktekeningenAction(ontwerp);
+      setTekeningen(resultaat);
+      toast('succes', 'Werktekening gegenereerd', `${resultaat.length} tekening(en) — ook vastgelegd in het dossier`);
     });
   };
 

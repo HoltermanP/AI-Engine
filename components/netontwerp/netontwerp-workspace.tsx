@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { Netontwerp, NetontwerpAsset, NetontwerpStap } from '@/lib/netontwerp/types';
 import { nieuweAansluitingDefaults } from '@/lib/netontwerp/belastingen';
 import { afgeleideStapStatus } from '@/lib/netontwerp/stappen';
-import { snapNaarLijnen } from '@/lib/netontwerp/chainage';
+import { snapNaarLijnen, puntOpChainage, lijnLengteM } from '@/lib/netontwerp/chainage';
+import type { CsvParseResultaat } from '@/lib/netontwerp/belastingen';
 import { bepaalRingVolgorde } from '@/lib/netontwerp/stations-advies';
 import {
   saveNetontwerpAction,
@@ -66,6 +67,27 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
     },
     [router],
   );
+
+  /* ── Sneltoetsen: Esc verlaat de plaatsmodus, Delete verwijdert selectie ── */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const doel = e.target as HTMLElement | null;
+      if (doel && ['INPUT', 'TEXTAREA', 'SELECT'].includes(doel.tagName)) return;
+      if (e.key === 'Escape') {
+        setPlaatsModus(null);
+        setGeselecteerdAssetId(null);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && geselecteerdAssetId) {
+        e.preventDefault();
+        setOntwerp((prev) => ({
+          ...prev,
+          assets: prev.assets.filter((a) => a.id !== geselecteerdAssetId),
+        }));
+        setGeselecteerdAssetId(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [geselecteerdAssetId]);
 
   /* ── Debounced opslag van het ontwerp ─────────────────────────────── */
   const ontwerpSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,6 +218,42 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
       setGeselecteerdTraceId(resultaat.trace.id);
     },
     [ontwerp],
+  );
+
+  /** Bulk-import (CSV): spreid de aansluitingen gelijkmatig langs het eerste tracé. */
+  const handleBulkImport = useCallback(
+    (rijen: CsvParseResultaat['rijen']) => {
+      const lijn =
+        (geselecteerdTraceId ? traceLinesById[geselecteerdTraceId] : undefined)?.find(
+          (l) => l.length >= 2,
+        ) ?? Object.values(traceLinesById).flat().find((l) => l.length >= 2);
+
+      setOntwerp((prev) => {
+        const nieuwe = rijen.map((rij, i) => {
+          let x = 0;
+          let y = 0;
+          if (lijn) {
+            const totaal = lijnLengteM(lijn);
+            const punt = puntOpChainage(lijn, (totaal * (i + 1)) / (rijen.length + 1));
+            if (punt) {
+              // 25 m loodrecht uit de as zodat de punten naast het tracé liggen
+              x = punt.x - 25 * Math.sin(punt.richtingRad);
+              y = punt.y + 25 * Math.cos(punt.richtingRad);
+            }
+          }
+          plaatsTeller += 1;
+          return {
+            id: `aansl-csv-${Date.now()}-${plaatsTeller}`,
+            netvlak: 'LS' as const,
+            x,
+            y,
+            ...rij,
+          };
+        });
+        return { ...prev, aansluitingen: [...prev.aansluitingen, ...nieuwe] };
+      });
+    },
+    [geselecteerdTraceId, traceLinesById],
   );
 
   /** Na ringgeneratie: het nieuwe MS-tracé van de server ophalen en tonen. */
@@ -356,7 +414,11 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
           )}
 
           {actieveStap === 'belastingen' && (
-            <StapBelastingen ontwerp={ontwerp} onOntwerpChange={setOntwerp} />
+            <StapBelastingen
+              ontwerp={ontwerp}
+              onOntwerpChange={setOntwerp}
+              onBulkImport={handleBulkImport}
+            />
           )}
           {actieveStap === 'trace' && (
             <StapTrace

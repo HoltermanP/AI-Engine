@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import type { Netontwerp, NetontwerpAsset } from '@/lib/netontwerp/types';
 import { STATION_SUBTYPE_LABELS, type StationSubtype } from '@/lib/netontwerp/types';
 import { suggestStationsAction, genereerRingVerbindingAction } from '@/lib/actions/netontwerp';
+import { toast } from '@/lib/toast';
 import type { StationsAdvies } from '@/lib/netontwerp/stations-advies';
 import { Button } from '@/components/ui/button';
 import { Building2, CircleDashed, Loader2, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
@@ -38,11 +39,13 @@ export function StapStations({
       const resultaat = await genereerRingVerbindingAction(ontwerp);
       if ('error' in resultaat) {
         setRingMelding(resultaat.error);
+        toast('fout', 'Ringverbinding mislukt', resultaat.error);
         return;
       }
       onOntwerpChange(resultaat.ontwerp);
       onRingTrace?.(resultaat.trace.id);
       setRingMelding(resultaat.samenvatting);
+      toast('succes', 'MS-ring gegenereerd', resultaat.samenvatting);
     });
   };
 

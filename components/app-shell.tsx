@@ -14,8 +14,10 @@ import {
   FileBarChart,
   ClipboardList,
   Menu,
+  Search as SearchIcon,
   X,
 } from 'lucide-react';
+import { CommandPalette } from '@/components/command-palette';
 import { cn } from '@/lib/utils';
 import {
   extractProjectIdFromPath,
@@ -360,9 +362,19 @@ export function AppShell({ children, userName = 'Ingenieur' }: AppShellProps) {
             <ChevronRight className="hidden h-3 w-3 shrink-0 text-muted-foreground/60 sm:block" />
             <span className="truncate font-medium text-foreground">{breadcrumb}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+            className="ml-auto hidden items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted sm:flex"
+          >
+            <SearchIcon className="h-3.5 w-3.5" />
+            Zoeken…
+            <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[10px]">⌘K</kbd>
+          </button>
         </header>
         <main className="app-mesh-bg flex-1 overflow-auto">{children}</main>
       </div>
+      <CommandPalette />
     </div>
   );
 }

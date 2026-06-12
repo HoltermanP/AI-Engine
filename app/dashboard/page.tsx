@@ -10,12 +10,16 @@ import { buttonVariants } from '@/components/ui/button';
 import { DEMO_USER } from '@/lib/auth';
 import { enrichActions } from '@/lib/services/action-signals';
 import { getAllProjectSummaries, getManagementKPIs, getProjectActions } from '@/lib/services/project-stats';
+import { bepaalPortfolioSignalen } from '@/lib/services/termijnbewaking';
+import { TermijnWidget } from '@/components/termijn-widget';
+import { NieuwProjectWizard } from '@/components/nieuw-project-wizard';
 import { cn } from '@/lib/utils';
 import { ArrowRight, Map } from 'lucide-react';
 
 export default async function DashboardPage() {
   const summaries = await getAllProjectSummaries();
   const kpis = await getManagementKPIs(summaries);
+  const portfolioSignalen = bepaalPortfolioSignalen(2).slice(0, 5);
   const actions = getProjectActions();
   const enriched = enrichActions(actions.filter((a) => a.status !== 'afgerond'));
   const actiesPerSignaal = {
@@ -33,18 +37,25 @@ export default async function DashboardPage() {
           title="Jouw infrastructuur, onder controle"
           subtitle="Van tracé-ontwerp tot dossier — volg voortgang, los conflicten op en houd grip op elk project in één overzicht."
           actions={
-            <Link
-              href="/project/demo-project-001"
-              className={cn(buttonVariants({ size: 'sm' }), 'shadow-md shadow-[#2D6FE8]/25')}
-            >
-              <Map className="h-3.5 w-3.5" />
-              Naar werkruimte
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <NieuwProjectWizard />
+              <Link
+                href="/project/demo-project-001"
+                className={cn(buttonVariants({ size: 'sm' }), 'shadow-md shadow-[#2D6FE8]/25')}
+              >
+                <Map className="h-3.5 w-3.5" />
+                Naar werkruimte
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           }
         />
 
         <EnhancedKpiDashboard kpis={kpis} actiesPerSignaal={actiesPerSignaal} />
+
+        {portfolioSignalen.length > 0 && (
+          <TermijnWidget signalen={portfolioSignalen} toonProject />
+        )}
 
         <WorkflowOverview />
 

@@ -423,11 +423,11 @@ function gridCell(
   const fullValue = opts.value ?? valueLines.join(' ');
   const displayTruncated =
     Boolean(opts.value) && truncateCell(fullValue, maxCharsForCell(w)) !== fullValue;
-  const titleTip =
-    opts.tip ??
-    (fullValue && (displayTruncated || valueLines.length > 1)
+  const titleTip = opts.tip
+    ? `<title>${escapeXml(opts.tip)}</title>`
+    : fullValue && (displayTruncated || valueLines.length > 1)
       ? `<title>${escapeXml(label || 'Waarde')}: ${escapeXml(fullValue)}</title>`
-      : '');
+      : '';
 
   const labelText =
     label && !opts.valueOnly

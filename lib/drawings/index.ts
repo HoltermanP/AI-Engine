@@ -1,14 +1,13 @@
 import type { DemoTrace } from '@/demo/traces';
 import type { DemoBestaandNet } from '@/demo/klic';
-import { formatDocCode } from '@/lib/dossier/doc-code';
 import type { DrawingResult } from './types';
 import { generateTracePlan } from './trace-plan';
 import { generateLengthProfile } from './length-profile';
 import { generateCrossSection } from './cross-section';
 import { generateCrossingDetail } from './crossing-detail';
 import { generateStationDrawing } from './station';
-import { valideerTekening, projectForTrace } from './format';
-import { wrapDrawingWithTitelblok, type TitelblokOpts } from './titelblok';
+import { valideerTekening } from './format';
+import { type TitelblokOpts } from './titelblok';
 
 export type { DrawingResult, DrawingType } from './types';
 export {
@@ -51,11 +50,6 @@ const FASE_PREFIX: Record<TekeningFase, string> = {
   uo: 'Werktekening',
 };
 
-const FASE_STATUS: Record<TekeningFase, 'concept' | 'in review' | 'definitief'> = {
-  vo: 'concept',
-  do: 'in review',
-  uo: 'definitief',
-};
 
 /**
  * Genereert de tekeningen voor een tracé per ontwerpfase (VO/DO/UO) en
@@ -96,22 +90,14 @@ export function generateDrawings(
     }
   }
 
-  const project = projectForTrace(trace);
-  return drawings.map((drawing, i) => ({
+  // Elke tekening heeft al een volwaardig NLCS-titelblok ín het tekenvlak
+  // (svgDocument); een tweede extern blok eronder is dubbelop en
+  // onprofessioneel. Het titelblok-argument blijft beschikbaar voor callers
+  // die een kale SVG alsnog willen wrappen (wrapDrawingWithTitelblok).
+  void titelblok;
+  return drawings.map((drawing) => ({
     ...drawing,
     label: `${FASE_PREFIX[fase]} — ${drawing.label}`,
-    svg: wrapDrawingWithTitelblok(drawing.svg, {
-      projectnaam: project.naam,
-      opdrachtgever: project.opdrachtgever,
-      status: FASE_STATUS[fase],
-      tekeningnummer: formatDocCode({
-        projectCode: trace.code,
-        fase,
-        type: 'TEK',
-        volgnummer: i + 1,
-      }),
-      ...titelblok,
-    }),
   }));
 }
 

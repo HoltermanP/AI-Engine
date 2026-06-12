@@ -10,8 +10,19 @@ import {
   defaultRevisieRows,
   northArrow,
 } from './format';
-import { isoTekenkader } from './symbols';
+import { isoTekenkader, maatlijnHorizontaal } from './symbols';
 import { NLCS_LIJNDIKTE } from './nlcs';
+
+/** Standaardreeks tekenschalen (NEN-EN-ISO 5455). */
+const STANDAARD_SCHALEN = [100, 200, 250, 500, 1000, 2000, 2500, 5000];
+
+/** Kies de kleinste standaardschaal waarop de lengte binnen het vlak past. */
+function kiesStandaardSchaal(lengteM: number, beschikbaarMm: number): number {
+  for (const s of STANDAARD_SCHALEN) {
+    if ((lengteM * 1000) / s <= beschikbaarMm) return s;
+  }
+  return STANDAARD_SCHALEN[STANDAARD_SCHALEN.length - 1];
+}
 
 function segmentTekeningNummer(traceCode: string, volgorde: number): string {
   return `TK-BPL-${traceCode}-S${volgorde}-2026-001`;
@@ -25,13 +36,18 @@ export function generateBorePlanDrawing(
   const h = 560;
   const theme = DEFAULT_TEKENING_THEME;
   const t = segment.boorplan.trajectory;
+  // Tekenschaal uit de standaardreeks: 900 SVG-eenheden ≈ A3-liggend (420 mm)
+  const unitsPerMm = w / 420;
+  const beschikbaarMm = (w * 0.72) / unitsPerMm;
+  const schaal = kiesStandaardSchaal(segment.boorplan.lengteM, beschikbaarMm);
   const meta = {
     type: 'bore_plan' as const,
     titel: 'Boorplan (plan)',
-    ondertitel: `${BORE_METHODE_LABELS[segment.methode]} — ${segment.label}`,
+    // segment.label bevat al methode + wegnaam — niet dubbel voorvoegen
+    ondertitel: segment.label,
     trace,
     norm: 'NEN 3650 / NLCS 5.1 / RD EPSG:28992',
-    schaal: '1:500',
+    schaal: `1:${schaal}`,
     legenda: [
       { label: 'Ontwerptracé', color: trace.kleur, strokeWidth: 2.5 },
       { label: 'Boogtraject', color: '#E67E22', strokeWidth: 2, dash: '6,3' },
@@ -47,12 +63,12 @@ export function generateBorePlanDrawing(
   const { pad, drawW, drawH } = tekeningVlak(w, h, meta);
   const c = themeColors(theme);
   const lengteM = segment.boorplan.lengteM;
-  const entryX = pad.l + drawW * 0.12;
-  const exitX = pad.l + drawW * 0.88;
-  const midY = pad.t + drawH * 0.5;
-  const boreLen = exitX - entryX;
-  // Schaal in px/m zodat putafmetingen en maatvoering onderling kloppen
-  const pxPerM = boreLen / lengteM;
+  // Op ware tekenschaal: px/m volgt uit de gekozen standaardschaal
+  const pxPerM = (unitsPerMm * 1000) / schaal;
+  const boreLen = lengteM * pxPerM;
+  const entryX = pad.l + (drawW - boreLen) / 2;
+  const exitX = entryX + boreLen;
+  const midY = pad.t + drawH * 0.42;
 
   // In bovenaanzicht volgt het boortraject de tracélijn (diepte bestaat hier niet)
   const borePath = `M ${entryX} ${midY} L ${exitX} ${midY}`;
@@ -64,7 +80,7 @@ export function generateBorePlanDrawing(
   const content = `
   ${isoTekenkader(pad.l, pad.t, drawW, drawH)}
   ${northArrow(pad.l + 24, pad.t + 24, 22, theme)}
-  <text x="${pad.l + drawW / 2}" y="${pad.t + 12}" text-anchor="middle" fill="${c.subtitel}" font-size="7" font-family="IBM Plex Sans,sans-serif">Schaal 1:${Math.round(1000 / pxPerM / 10) * 10}</text>
+  <text x="${pad.l + drawW / 2}" y="${pad.t + 12}" text-anchor="middle" fill="${c.subtitel}" font-size="7" font-family="IBM Plex Sans,sans-serif">Schaal 1:${schaal} (A3)</text>
 
   <!-- Startput -->
   <rect x="${entryX - entryPutW / 2}" y="${midY - entryPutH / 2}" width="${entryPutW}" height="${entryPutH}" fill="${TEKENING_KLEUREN.accent}20" stroke="${TEKENING_KLEUREN.accent}" stroke-width="${NLCS_LIJNDIKTE.normaal}"/>
@@ -74,6 +90,7 @@ export function generateBorePlanDrawing(
   <!-- Eindput -->
   <rect x="${exitX - exitPutW / 2}" y="${midY - entryPutH / 2}" width="${exitPutW}" height="${entryPutH}" fill="${TEKENING_KLEUREN.waarschuwing}20" stroke="${TEKENING_KLEUREN.waarschuwing}" stroke-width="${NLCS_LIJNDIKTE.normaal}"/>
   <text x="${exitX}" y="${midY + entryPutH / 2 + 10}" text-anchor="middle" fill="${c.text}" font-size="6" font-family="IBM Plex Mono,monospace">Eindput</text>
+  <text x="${exitX}" y="${midY + entryPutH / 2 + 18}" text-anchor="middle" fill="${c.muted}" font-size="5" font-family="IBM Plex Mono,monospace">${t.exitPutL}×${t.exitPutB} m</text>
 
   <!-- Boogtraject (volgt tracé in bovenaanzicht) -->
   <path d="${borePath}" fill="none" stroke="#E67E22" stroke-width="2.5" stroke-dasharray="6,3"/>
@@ -83,11 +100,9 @@ export function generateBorePlanDrawing(
   <line x1="${entryX}" y1="${midY - 14}" x2="${exitX}" y2="${midY - 14}" stroke="${trace.kleur}" stroke-width="3"/>
   <text x="${entryX + boreLen / 2}" y="${midY - 20}" text-anchor="middle" fill="${trace.kleur}" font-size="6" font-family="IBM Plex Sans,sans-serif">Ontwerptracé</text>
 
-  <!-- Maatvoering -->
-  <line x1="${entryX}" y1="${midY + 56}" x2="${exitX}" y2="${midY + 56}" stroke="${c.border}" stroke-width="0.75"/>
-  <line x1="${entryX}" y1="${midY + 52}" x2="${entryX}" y2="${midY + 60}" stroke="${c.border}" stroke-width="0.75"/>
-  <line x1="${exitX}" y1="${midY + 52}" x2="${exitX}" y2="${midY + 60}" stroke="${c.border}" stroke-width="0.75"/>
-  <text x="${entryX + boreLen / 2}" y="${midY + 66}" text-anchor="middle" fill="${c.text}" font-size="6" font-family="IBM Plex Mono,monospace">Maatvoering ${lengteM.toFixed(0)} m</text>
+  <!-- Maatvoering (NEN-maatlijn met pijlpunten) -->
+  ${maatlijnHorizontaal(entryX, exitX, midY + 52, `${lengteM.toFixed(0)} m`)}
+  <text x="${entryX + boreLen / 2}" y="${midY + 70}" text-anchor="middle" fill="${c.muted}" font-size="5" font-family="IBM Plex Mono,monospace">Maatvoering hart startput — hart eindput</text>
 
   <!-- Legenda -->
   <text x="${pad.l + 8}" y="${pad.t + drawH - 8}" fill="${c.muted}" font-size="5" font-family="IBM Plex Sans,sans-serif">Legenda</text>

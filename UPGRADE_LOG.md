@@ -123,3 +123,11 @@ Tests: 179. Build groen (17 routes). Browser-verificatie: palette-navigatie, wiz
 - Mislukte conversies degraderen netjes (SVG/MD-fallback + 99-opmerkingen.txt).
 
 Tests: 182. Geverifieerd: ZIP met geldige meerpagina-PDF's, 4 DXF's, 2 Excels; werktekening-PDF visueel gecontroleerd (tracé, moffen, mantelbuizen, station, titelblok).
+
+### Tekeningen professioneel conform tekenafspraken (2026-06-12)
+Visuele audit van alle 10 tekeningtypes (scripts/render-tekeningen-audit.ts rastert alles naar PNG) + fixes:
+- **Dubbel titelblok verwijderd**: generateDrawings wrapte een tweede extern titelblok onder tekeningen die al een volwaardig NLCS-titelblok in het vlak hebben.
+- **Boorprofiel**: verticale overdrijving begrensd op 25× (geen "kliffen" meer), NAP-as mét leesbare labels binnen het kader, sonderingen geclipt op het profielvlak (liepen door het titelblok) met ↓-aanduiding bij doorzakkende CPT's, grondwaterpeil-symbool ∇, θ-annotaties bij in-/uittrede en R-aanduiding bij de boog.
+- **Boorplan**: tekenschaal uit de standaardreeks NEN-EN-ISO 5455 (1:100…1:5000) en op wáre schaal gecentreerd in het vlak; NEN-maatlijn met pijlpunten (hart startput—hart eindput); eindput-afmeting toegevoegd; dubbele methode-vermelding in de ondertitel weg.
+- **Lengteprofiel**: verticaal bereik strak om het profiel (geen lege onderhelft), NAP-as binnen het kader.
+- **Geldige SVG**: onbalans in <g>-tags (kruisingsdetail) en rauwe tooltip-tekst zonder <title>/escaping (titelblok-cellen, brak op "V&G") gerepareerd — alle tekeningen parsen nu strikt (resvg) en rasteren dus ook correct in de uitvoeringsmap-PDF's.

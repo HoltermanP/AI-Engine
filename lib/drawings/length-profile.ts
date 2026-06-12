@@ -48,15 +48,17 @@ export function generateLengthProfile(trace: DemoTrace): string {
   const c = themeColors(theme);
   const tracePoints = traceChainagePoints(trace);
 
-  const minZ = Math.min(
-    ...profile.map((p) => p.hoogteNap),
-    ...tracePoints.map((p) => p.z),
-    -2.5
-  );
+  // Verticaal bereik strak om het profiel (geen lege onderhelft)
+  const minZ =
+    Math.min(...profile.map((p) => p.hoogteNap), ...tracePoints.map((p) => p.z)) - 0.75;
   const maxZ = Math.max(...profile.map((p) => p.hoogteNap), 0.5);
   const rangeZ = maxZ - minZ || 1;
 
-  const tx = (chainage: number) => pad.l + (chainage / lengte) * drawW;
+  // NAP-aslabels binnen het kader: plotvlak begint rechts van de as
+  const asMarge = 30;
+  const plotX0 = pad.l + asMarge;
+  const plotW = drawW - asMarge;
+  const tx = (chainage: number) => plotX0 + (chainage / lengte) * plotW;
   const ty = (z: number) => pad.t + ((maxZ - z) / rangeZ) * drawH;
 
   const maaiveldPath = profile
@@ -106,8 +108,8 @@ export function generateLengthProfile(trace: DemoTrace): string {
   const content = `
   ${isoTekenkader(pad.l, pad.t, drawW, drawH)}
   ${groundFill}
-  ${hoogteasNap(pad.l, pad.t, drawH, minZ, maxZ, hoogteInterval, c.muted)}
-  ${kettingas(pad.l, pad.t + drawH, drawW, lengte, chainageInterval, c.muted)}
+  ${hoogteasNap(plotX0, pad.t, drawH, minZ, maxZ, hoogteInterval, c.muted)}
+  ${kettingas(plotX0, pad.t + drawH, plotW, lengte, chainageInterval, c.muted)}
   <text x="12" y="${(pad.t + pad.t + drawH) / 2}" fill="${c.muted}" font-size="8" font-family="IBM Plex Mono,monospace" transform="rotate(-90,12,${(pad.t + pad.t + drawH) / 2})">m NAP</text>
   <text x="${(pad.l + pad.l + drawW) / 2}" y="${pad.t + drawH + 28}" fill="${c.muted}" font-size="8" font-family="IBM Plex Mono,monospace" text-anchor="middle">Ketting (m)</text>
   ${hddMarkers}

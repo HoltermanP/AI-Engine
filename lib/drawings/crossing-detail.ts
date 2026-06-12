@@ -64,7 +64,8 @@ export function generateCrossingDetail(trace: DemoTrace): string {
   <ellipse cx="${cx}" cy="${ontwerpY}" rx="${drawW * 0.26}" ry="32" fill="none" stroke="${c.subtitel}" stroke-width="${NLCS_LIJNDIKTE.medium}" stroke-dasharray="${NLCS_LIJNTYPE.streep}"/>
   <text x="${cx}" y="${ontwerpY + 52}" fill="${c.subtitel}" font-size="8" text-anchor="middle" font-family="IBM Plex Mono,monospace">Mantelbuis / beschermbuis</text>
   ${maatlijnVerticaal(cx - drawW * 0.32, maaiveldY, ontwerpY - 16, `dekking ${dekking.toFixed(1)} m`, 0)}
-  <text x="${pad.l + 12}" y="${pad.t + drawH - 36}" fill="${c.muted}" font-size="8" font-family="IBM Plex Mono,monospace">Dekking min. ${dekking.toFixed(1)} m (NEN 3651) · PE-coating + mantelbuis · COINS uitwisseling</text>`
+  <text x="${pad.l + 12}" y="${pad.t + drawH - 36}" fill="${c.muted}" font-size="8" font-family="IBM Plex Mono,monospace">Dekking min. ${dekking.toFixed(1)} m (NEN 3651) · PE-coating + mantelbuis · COINS uitwisseling</text>
+</g>`
     : `<g><!-- Kruising LS/gas LD NEN 7171 -->
   <line x1="${pad.l + 48}" y1="${ontwerpY}" x2="${pad.l + drawW - 48}" y2="${ontwerpY}" stroke="${trace.kleur}" stroke-width="${NLCS_LIJNDIKTE.constructie}"/>
   <text x="${pad.l + 54}" y="${ontwerpY - 8}" fill="${trace.kleur}" font-size="8" font-family="IBM Plex Mono,monospace">${trace.netType.slice(0, 28)}</text>
@@ -73,7 +74,8 @@ export function generateCrossingDetail(trace: DemoTrace): string {
   ${kruisingshoek(cx, ontwerpY, 90, '90°')}
   ${maatlijnHorizontaal(cx + 20, cx + 70, ontwerpY + 18, '≥ 0,5 m vrij', 0)}
   ${maatlijnVerticaal(cx + drawW * 0.28, maaiveldY, ontwerpY, `dekking ${dekking.toFixed(1)} m`, 0)}
-  <text x="${pad.l + 12}" y="${pad.t + drawH - 36}" fill="${c.muted}" font-size="8" font-family="IBM Plex Mono,monospace">Vrij te houden afstand: 0,5 m (NEN 7171) · Dekking min. ${dekking.toFixed(1)} m</text>`;
+  <text x="${pad.l + 12}" y="${pad.t + drawH - 36}" fill="${c.muted}" font-size="8" font-family="IBM Plex Mono,monospace">Vrij te houden afstand: 0,5 m (NEN 7171) · Dekking min. ${dekking.toFixed(1)} m</text>
+</g>`;
 
   const content = `
   ${isoTekenkader(pad.l, pad.t, drawW, drawH)}

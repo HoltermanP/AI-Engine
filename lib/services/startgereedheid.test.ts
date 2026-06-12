@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bepaalStartgereedheid } from './startgereedheid';
 import { saveTekeningenToDossier, saveBerekeningenToDossier } from '@/lib/dossier/store';
+import { zetDemoVergunningStatus } from '@/lib/db/vergunningen-store';
 
 describe('startgereedheid (go/no-go start uitvoering)', () => {
   it('is NO_GO bij een leeg dossier en benoemt de ontbrekende producten', () => {
@@ -47,5 +48,25 @@ describe('startgereedheid (go/no-go start uitvoering)', () => {
   it('neemt het netontwerp-criterium alleen op wanneer er een ontwerp is', () => {
     const met = bepaalStartgereedheid('demo-project-001'); // heeft seed-netontwerp
     expect(met.criteria.some((c) => c.id === 'netontwerp')).toBe(true);
+  });
+
+  it('zet het vergunningcriterium op gereed zodra alle vergunningen verleend zijn', () => {
+    const voor = bepaalStartgereedheid('demo-project-004');
+    const criterium = voor.criteria.find((c) => c.id === 'vergunningen')!;
+    expect(criterium.status).not.toBe('gereed');
+    expect(voor.vergunningen.length).toBeGreaterThan(0);
+
+    // Eén vergunning indienen → aandacht of nog ontbreekt, maar niet gereed
+    zetDemoVergunningStatus('demo-project-004', voor.vergunningen[0].id, 'ingediend');
+    const tussen = bepaalStartgereedheid('demo-project-004');
+    expect(tussen.criteria.find((c) => c.id === 'vergunningen')!.status).not.toBe('gereed');
+
+    // Alles verlenen → gereed
+    for (const v of voor.vergunningen) {
+      zetDemoVergunningStatus('demo-project-004', v.id, 'verleend');
+    }
+    const na = bepaalStartgereedheid('demo-project-004');
+    expect(na.criteria.find((c) => c.id === 'vergunningen')!.status).toBe('gereed');
+    expect(na.pct).toBeGreaterThan(voor.pct);
   });
 });

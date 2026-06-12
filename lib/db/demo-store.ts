@@ -9,10 +9,19 @@ import type { CollectedTraceData } from '@/lib/services/collect-trace-data';
 import type { PersistedTraceToets } from '@/lib/services/trace-toets';
 import type { Discipline } from './types';
 
-const traceOverrides = new Map<string, Partial<DemoTrace>>();
+// globalThis-singletons: route- en action-bundles in Next-dev kunnen aparte
+// module-instanties laden; gedeelde Maps voorkomen dat sessiedata verdwijnt.
+const g = globalThis as unknown as {
+  __traceOverrides?: Map<string, Partial<DemoTrace>>;
+  __createdTraces?: Map<string, DemoTrace>;
+  __traceSessions?: Map<string, DemoTraceSession>;
+  __uploadedSonderingen?: (typeof DEMO_SONDERINGEN)[number][];
+};
+
+const traceOverrides = (g.__traceOverrides ??= new Map());
 
 /** In de sessie aangemaakte tracés (bijv. nieuwe strengen uit het netontwerp). */
-const createdTraces = new Map<string, DemoTrace>();
+const createdTraces = (g.__createdTraces ??= new Map());
 
 export function addDemoTrace(trace: DemoTrace): void {
   createdTraces.set(trace.id, trace);
@@ -28,7 +37,7 @@ interface DemoTraceSession {
   traceToets?: PersistedTraceToets;
 }
 
-const traceSessions = new Map<string, DemoTraceSession>();
+const traceSessions = (g.__traceSessions ??= new Map());
 
 export function saveDemoTraceSession(
   traceId: string,
@@ -142,7 +151,7 @@ export function getDemoReferentieTraces(): DemoReferentieTrace[] {
 }
 
 /** Via GEF-upload toegevoegde sonderingen (sessie; geen migraties). */
-const uploadedSonderingen: (typeof DEMO_SONDERINGEN)[number][] = [];
+const uploadedSonderingen = (g.__uploadedSonderingen ??= []);
 
 export function addDemoSonderingen(items: (typeof DEMO_SONDERINGEN)[number][]): void {
   for (const item of items) {

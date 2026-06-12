@@ -95,3 +95,10 @@ Volledige app-walkthrough (screenshots alle hoofdpagina's) en verbeteringen:
 3. **Dossier-lege-staat**: begeleidende proceskaarten (engineering → omgeving → werkvoorbereiding) met links i.p.v. een kale melding.
 
 Tests: 176. Build groen. Browser-verificatie zonder fouten.
+
+### Vervolg: vergunningstatus-beheer + Startbesluit (2026-06-12)
+- **Vergunningstatussen** (`lib/db/vergunningen-store.ts` + `zetVergunningStatusAction`): per vergunning niet ingediend → ingediend → verleend, bij te werken met dropdowns ín de cockpit. Het vergunningcriterium (en daarmee de gate) springt automatisch op gereed zodra alles verleend is.
+- **Startbesluit** (`/project/[id]/startbesluit`): formeel, print-klaar go/no-go-document met doc-code ([PROJECT]-WVB-NOT-001), projectgegevens, GO/NO-GO-banner, criteria- en vergunningentabel, voorwaarden bij start (WIBON/CROW 500/V&G/as-built) en ondertekeningsvlakken. Knop in de cockpit ("Startbesluit opstellen" bij GO, anders "Concept-startbesluit bekijken").
+- **Fix in-memory stores in Next-dev**: route- en action-bundles kunnen aparte module-instanties laden waardoor sessiedata "verdween"; alle stores (dossier, demo-overrides, netontwerp, vergunningen, sonderingen) gebruiken nu het globalThis-singleton-patroon.
+
+Tests: 177. Build groen. Browser-verificatie: status bijwerken → reload → status behouden → criterium "Alle 2 vergunningen verleend" → Startbesluit toont Verleend.

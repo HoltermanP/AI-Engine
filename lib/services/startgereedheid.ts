@@ -17,8 +17,21 @@ import {
 } from '@/lib/planning/vergunningen';
 import { afgeleideStapStatus } from '@/lib/netontwerp/stappen';
 import { heeftSleuflozeSegmenten } from '@/lib/bore';
+import {
+  getDemoVergunningStatussen,
+  VERGUNNING_STATUS_LABELS,
+  type VergunningStatus,
+} from '@/lib/db/vergunningen-store';
 
 export type CriteriumStatus = 'gereed' | 'ontbreekt' | 'aandacht' | 'nvt';
+
+export interface VergunningRegel {
+  id: string;
+  naam: string;
+  bevoegdGezag: string;
+  termijnWeken: number;
+  status: VergunningStatus;
+}
 
 export interface StartCriterium {
   id: string;
@@ -40,6 +53,8 @@ export interface StartgereedheidResultaat {
   criteria: StartCriterium[];
   /** Kritieke vergunningsdoorlooptijd in weken (langste wettelijke termijn) */
   kritiekeVergunningWeken: number;
+  /** Vereiste vergunningen met hun actuele status (bij te werken in de cockpit) */
+  vergunningen: VergunningRegel[];
   samenvatting: string;
 }
 
@@ -129,19 +144,39 @@ export function bepaalStartgereedheid(projectId: string): StartgereedheidResulta
     actieLabel: 'Naar omgeving',
   });
 
-  // 6. Vergunningen: aanvragen ingediend + kritieke termijn
-  const aanvragen = heeft(items, (i) => i.type === 'aanvraag' || /vergunning/i.test(i.naam));
+  // 6. Vergunningen: status per vergunning (handmatig bij te werken in de cockpit)
   const alleVergunningen = traces.flatMap((t) => deriveVergunningen(vergunningInputUitTrace(t)));
   const uniek = [...new Map(alleVergunningen.map((v) => [v.id, v])).values()];
   const doorlooptijd = berekenVergunningDoorlooptijd(uniek);
+  const statusRecords = getDemoVergunningStatussen(projectId);
+  const vergunningRegels: VergunningRegel[] = uniek.map((v) => ({
+    id: v.id,
+    naam: v.naam,
+    bevoegdGezag: v.bevoegdGezag,
+    termijnWeken: v.termijnWeken,
+    status: statusRecords[v.id]?.status ?? 'niet_ingediend',
+  }));
+  const verleend = vergunningRegels.filter((v) => v.status === 'verleend').length;
+  const ingediend = vergunningRegels.filter((v) => v.status === 'ingediend').length;
+  const vergunningStatus: CriteriumStatus =
+    uniek.length === 0 || verleend === uniek.length
+      ? 'gereed'
+      : verleend + ingediend === uniek.length
+        ? 'aandacht'
+        : 'ontbreekt';
   criteria.push({
     id: 'vergunningen',
-    titel: 'Vergunningen & meldingen ingediend',
-    status: aanvragen.length > 0 ? (uniek.length > 0 ? 'aandacht' : 'gereed') : 'ontbreekt',
+    titel: 'Vergunningen & meldingen verleend',
+    status: vergunningStatus,
     detail:
-      aanvragen.length > 0
-        ? `${aanvragen.length} aanvraag/aanvragen voorbereid · ${uniek.length} vergunningen vereist — kritieke beslistermijn ${doorlooptijd.kritiekeDoorlooptijdWeken} weken (bewaak in de planning)`
-        : `${uniek.length} vergunningen vereist (${uniek.map((v) => v.naam.split(' ')[0]).join(', ')}) — nog niets ingediend`,
+      uniek.length === 0
+        ? 'Geen vergunningplichtige activiteiten gesignaleerd'
+        : vergunningStatus === 'gereed'
+          ? `Alle ${uniek.length} vergunningen verleend`
+          : `${verleend} verleend · ${ingediend} in behandeling · ${uniek.length - verleend - ingediend} niet ingediend — kritieke beslistermijn ${doorlooptijd.kritiekeDoorlooptijdWeken} weken. Werk de status hieronder bij: ${vergunningRegels
+              .filter((v) => v.status !== 'verleend')
+              .map((v) => `${v.naam} (${VERGUNNING_STATUS_LABELS[v.status].toLowerCase()})`)
+              .join('; ')}`,
     actieHref: `/project/${projectId}/planning`,
     actieLabel: 'Bewaak in planning',
   });
@@ -226,6 +261,7 @@ export function bepaalStartgereedheid(projectId: string): StartgereedheidResulta
     totaalVereist: beoordeelbaar.length,
     criteria,
     kritiekeVergunningWeken: doorlooptijd.kritiekeDoorlooptijdWeken,
+    vergunningen: vergunningRegels,
     samenvatting:
       verdict === 'GO'
         ? `Werkvoorbereiding compleet — uitvoering kan starten (let op KLIC-melding ≤ 20 werkdagen vooraf).`

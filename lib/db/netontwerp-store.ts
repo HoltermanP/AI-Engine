@@ -6,7 +6,10 @@
 import type { Netontwerp } from '@/lib/netontwerp/types';
 import { DEMO_NETONTWERPEN } from '@/demo/netontwerpen';
 
-const overrides = new Map<string, Netontwerp>();
+// globalThis-singleton (zie vergunningen-store): voorkomt state-verlies
+// tussen route- en action-bundles in Next-dev.
+const g = globalThis as unknown as { __netontwerpOverrides?: Map<string, Netontwerp> };
+const overrides = (g.__netontwerpOverrides ??= new Map());
 
 export function getDemoNetontwerp(projectId: string): Netontwerp | null {
   const override = overrides.get(projectId);

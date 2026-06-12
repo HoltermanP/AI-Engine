@@ -3,12 +3,14 @@ import type {
   CriteriumStatus,
   StartgereedheidResultaat,
 } from '@/lib/services/startgereedheid';
+import { VergunningStatusLijst } from '@/components/vergunning-status-lijst';
 import { cn } from '@/lib/utils';
 import {
   ArrowRight,
   CheckCircle2,
   CircleAlert,
   CircleDashed,
+  FileSignature,
   Rocket,
   ShieldCheck,
   TriangleAlert,
@@ -112,10 +114,14 @@ export function StartUitvoeringPanel({ resultaat }: { resultaat: Startgereedheid
               <StatusIcoon status={c.status} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className={cn('text-xs font-medium', c.status === 'gereed' ? 'text-foreground' : 'text-foreground')}>
-                {c.titel}
-              </p>
+              <p className="text-xs font-medium text-foreground">{c.titel}</p>
               <p className="text-[10px] leading-snug text-muted-foreground">{c.detail}</p>
+              {c.id === 'vergunningen' && (
+                <VergunningStatusLijst
+                  projectId={resultaat.projectId}
+                  vergunningen={resultaat.vergunningen}
+                />
+              )}
             </div>
             {c.actieHref && c.status !== 'gereed' && (
               <Link
@@ -129,6 +135,21 @@ export function StartUitvoeringPanel({ resultaat }: { resultaat: Startgereedheid
           </li>
         ))}
       </ul>
+
+      <div className="relative border-t border-border/60 p-3">
+        <Link
+          href={`/project/${resultaat.projectId}/startbesluit`}
+          className={cn(
+            'flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition-colors',
+            resultaat.verdict === 'GO'
+              ? 'bg-emerald-600 hover:bg-emerald-700'
+              : 'bg-[#2D6FE8] hover:bg-[#2563d4]',
+          )}
+        >
+          <FileSignature className="h-3.5 w-3.5" />
+          {resultaat.verdict === 'GO' ? 'Startbesluit opstellen' : 'Concept-startbesluit bekijken'}
+        </Link>
+      </div>
     </div>
   );
 }

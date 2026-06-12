@@ -15,7 +15,10 @@ export interface DossierItem {
   _source?: 'live' | 'demo';
 }
 
-const dossierStore = new Map<string, DossierItem[]>();
+// globalThis-singleton: voorkomt dat dossier-items "verdwijnen" doordat
+// route- en action-bundles in Next-dev aparte module-instanties laden.
+const g = globalThis as unknown as { __dossierStore?: Map<string, DossierItem[]> };
+const dossierStore: Map<string, DossierItem[]> = (g.__dossierStore ??= new Map());
 
 function key(projectId: string) {
   return projectId;

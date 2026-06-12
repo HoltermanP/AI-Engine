@@ -7,7 +7,11 @@ import { nieuweAansluitingDefaults } from '@/lib/netontwerp/belastingen';
 import { afgeleideStapStatus } from '@/lib/netontwerp/stappen';
 import { snapNaarLijnen } from '@/lib/netontwerp/chainage';
 import { bepaalRingVolgorde } from '@/lib/netontwerp/stations-advies';
-import { saveNetontwerpAction, maakNieuwTraceAction } from '@/lib/actions/netontwerp';
+import {
+  saveNetontwerpAction,
+  maakNieuwTraceAction,
+  getNetontwerpTracesAction,
+} from '@/lib/actions/netontwerp';
 import { demoTraceToMapTrace } from '@/lib/trace-edit';
 import { saveManualTraceAction } from '@/lib/actions/trace-routing';
 import { assetsNaarGeoJSON, aansluitingenNaarFeatures } from '@/lib/map/netontwerp-assets';
@@ -194,6 +198,18 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
     [ontwerp],
   );
 
+  /** Na ringgeneratie: het nieuwe MS-tracé van de server ophalen en tonen. */
+  const handleRingTrace = useCallback(async (traceId: string) => {
+    const verse = await getNetontwerpTracesAction([traceId]);
+    if (verse.length) {
+      setTraces((prev) => [
+        ...verse.map(demoTraceToMapTrace),
+        ...prev.filter((t) => t.id !== traceId),
+      ]);
+      setGeselecteerdTraceId(traceId);
+    }
+  }, []);
+
   const handleAssetClick = useCallback((assetId: string) => {
     setGeselecteerdAssetId((prev) => (prev === assetId ? null : assetId));
   }, []);
@@ -360,6 +376,7 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
               ontwerp={ontwerp}
               onOntwerpChange={setOntwerp}
               ringVolgorde={ringVolgorde}
+              onRingTrace={handleRingTrace}
             />
           )}
           {actieveStap === 'stationsontwerp' && (

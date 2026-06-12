@@ -2,6 +2,7 @@ import type { DemoTrace } from '@/demo/traces';
 import type { TraceSegment } from '@/demo/roads';
 import { DEMO_SONDERINGEN, type DemoSondering } from '@/demo/bro';
 import { getBoreSonderingOverrides } from '@/demo/bore-data';
+import { getDemoUploadedSonderingen } from '@/lib/db/demo-store';
 
 function segmentMidpoint(trace: DemoTrace, seg: TraceSegment): [number, number] {
   const coords = trace.coordinates;
@@ -16,12 +17,21 @@ function afstand2d(ax: number, ay: number, bx: number, by: number): number {
   return Math.hypot(ax - bx, ay - by);
 }
 
-/** Sonderingen binnen 150 m van segment-midden, plus trace-specifieke overrides. */
+/**
+ * Sonderingen binnen 150 m van segment-midden, plus trace-specifieke
+ * overrides. Geüploade GEF-sonderingen (binnen 500 m) gaan vóór demo-CPT's.
+ */
 export function sonderingenVoorSegment(trace: DemoTrace, seg: TraceSegment): DemoSondering[] {
   const overrides = getBoreSonderingOverrides(trace.id, seg.volgorde);
   if (overrides.length) return overrides;
 
   const [mx, my] = segmentMidpoint(trace, seg);
+  const geupload = getDemoUploadedSonderingen()
+    .filter((s) => afstand2d(s.x, s.y, mx, my) < 500)
+    .sort((a, b) => afstand2d(a.x, a.y, mx, my) - afstand2d(b.x, b.y, mx, my))
+    .slice(0, 3);
+  if (geupload.length) return geupload;
+
   const nearby = DEMO_SONDERINGEN.filter((s) => afstand2d(s.x, s.y, mx, my) < 150)
     .sort((a, b) => afstand2d(a.x, a.y, mx, my) - afstand2d(b.x, b.y, mx, my))
     .slice(0, 3);

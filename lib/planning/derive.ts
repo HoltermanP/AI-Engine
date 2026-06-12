@@ -5,6 +5,7 @@ import { checkBenodigdeOnderzoeken } from '@/lib/process/onderzoek-check';
 import { ENGINEERING_WORKFLOW } from '@/lib/process/workflow';
 import { sleuflozeSegmenten } from '@/lib/bore';
 import { BORE_METHODE_LABELS } from '@/lib/bore/types';
+import { deriveVergunningen, vergunningInputUitTrace } from './vergunningen';
 import type { PlanningActiviteitTemplate } from './types';
 
 function prefix(trace: DemoTrace, id: string) {
@@ -148,7 +149,7 @@ export function deriveTraceActiviteitTemplates(trace: DemoTrace): PlanningActivi
 
   templates.push({
     id: prefix(trace, 'vergunning'),
-    titel: `Vergunningen ${trace.code}`,
+    titel: `Vergunningen voorbereiden ${trace.code}`,
     beschrijving: `Vergunningchecklist OMO/OMA: melding activiteit Omgevingswet, eventueel watervergunning, kabelbedrijf-meldingen en verkeersbesluit bij wegkruising.`,
     categorie: 'vergunning',
     duurDagen: 10,
@@ -159,7 +160,7 @@ export function deriveTraceActiviteitTemplates(trace: DemoTrace): PlanningActivi
 
   templates.push({
     id: prefix(trace, 'aanvragen'),
-    titel: `Aanvragen & afstemming ${trace.code}`,
+    titel: `Aanvragen indienen ${trace.code}`,
     beschrijving: `Indienen meldingen, afstemming netbeheerders, WIBON graafmelding en omgevingsdienst.`,
     categorie: 'vergunning',
     duurDagen: 5,
@@ -168,9 +169,27 @@ export function deriveTraceActiviteitTemplates(trace: DemoTrace): PlanningActivi
     traceScope: true,
   });
 
+  // Per vergunning een eigen doorlooptijd-activiteit met de wettelijke
+  // beslistermijn als duur (Omgevingswet/keur) — start na indiening.
+  const vergunningen = deriveVergunningen(vergunningInputUitTrace(trace));
+  for (const item of vergunningen) {
+    templates.push({
+      id: prefix(trace, `vergunning-${item.id}`),
+      titel: `${item.naam} (${trace.code})`,
+      beschrijving: `${item.toelichting} Bevoegd gezag: ${item.bevoegdGezag}. Grondslag: ${item.grondslag}. Procedure: ${item.procedure} — wettelijke beslistermijn ${item.termijnWeken} weken.`,
+      categorie: 'vergunning',
+      duurDagen: item.termijnWeken * 5,
+      voorgangerIds: [prefix(trace, 'aanvragen')],
+      deliverables: [`Besluit ${item.naam}`],
+      traceScope: true,
+    });
+  }
+
   const uitvoeringVoorgangers = [
     prefix(trace, 'tekenen'),
-    prefix(trace, 'aanvragen'),
+    ...(vergunningen.length
+      ? vergunningen.map((v) => prefix(trace, `vergunning-${v.id}`))
+      : [prefix(trace, 'aanvragen')]),
     ...(sleufloos.length ? [prefix(trace, 'boorengineering')] : []),
   ];
 

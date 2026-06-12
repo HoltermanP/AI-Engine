@@ -59,3 +59,28 @@ describe('vergunningenplanning (Omgevingswet)', () => {
     expect(resultaat.maatgevend).toBeNull();
   });
 });
+
+describe('vergunningen → Gantt (deriveTraceActiviteitTemplates)', async () => {
+  const { deriveTraceActiviteitTemplates } = await import('./derive');
+  const { DEMO_TRACES } = await import('@/demo/traces');
+
+  it('maakt per vergunning een activiteit met de wettelijke termijn als duur', () => {
+    const trace = DEMO_TRACES[0]; // kruist water → watervergunning verwacht
+    const templates = deriveTraceActiviteitTemplates(trace);
+    const vergunningActiviteiten = templates.filter((t) =>
+      t.id.includes('vergunning-'),
+    );
+    expect(vergunningActiviteiten.length).toBeGreaterThanOrEqual(1);
+    // Wettelijke termijn in weken × 5 werkdagen
+    for (const act of vergunningActiviteiten) {
+      expect(act.duurDagen % 5).toBe(0);
+      expect(act.duurDagen).toBeGreaterThanOrEqual(10);
+      expect(act.categorie).toBe('vergunning');
+    }
+    // Uitvoering wacht op de vergunningbesluiten
+    const uitvoorbereid = templates.find((t) => t.id.endsWith('uitvoorbereid'));
+    expect(
+      vergunningActiviteiten.some((v) => uitvoorbereid?.voorgangerIds.includes(v.id)),
+    ).toBe(true);
+  });
+});

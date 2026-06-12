@@ -77,3 +77,12 @@
 - **Dossier-koppeling**: stationsontwerp-tekeningen (eenlijn + plattegrond) en werktekeningen worden bij generatie geregistreerd in het projectdossier (`saveTekeningenToDossier`).
 - **IEC 60287 in de UI** (batch 2): vol thermisch model als extra berekening bij elke MS-kabelkeuze; MS-ringvolgorde langs het tracé in stap 4.
 - Browser-regressie volledige flow stap 3→6 (kabel kiezen → stations overnemen → eenlijn/plattegrond → moffen → werktekening): geen consolefouten.
+
+## 2026-06-12 — Openstaande punten afgerond
+
+1. **MS-ringverbindingen als echte tracégeometrie**: `genereerRingVerbindingAction` routeert met de bestaande A*-router langs alle stations (ringvolgorde via MS-tracé of nearest-neighbor) en maakt daarvan een nieuw MS-tracé (EL-MS-RING-xx) incl. segmentanalyse; stations worden eraan gekoppeld. Knop "Genereer ringverbinding" in netontwerp stap 4.
+2. **GEF-upload**: `lib/connectors/gef/parse-gef.ts` (XYID/ZID/TESTID/COLUMNINFO/separator, qc-laagclassificatie veen<1/klei<3/zand) + `uploadGefAction` + upload-knop in het boorengineering-paneel. Geüploade CPT's (sessie, demo-store) gaan binnen 500 m vóór demo-sonderingen in `sonderingenVoorSegment`.
+3. **Vergunningen → Gantt**: `deriveVergunningen` is nu aangesloten op de planning — per vergunning een eigen activiteit met de wettelijke beslistermijn als duur (regulier 8 wkn / uitgebreid 26 wkn), na "Aanvragen indienen"; werkvoorbereiding uitvoering wacht op alle besluiten. `vergunningInputUitTrace` leidt de kenmerken af uit kruisingen/leglocatie/omschrijving.
+4. **Kabeltrekplan-trekvakken uit echte geometrie**: `lib/dossier/trekvak-geometrie.ts` leidt rechtstanden + bochten (werkelijke hoeken, knikken <15° genegeerd, knikken binnen 2 m samengevoegd) af uit de tracé-polyline; vervangt de aanname 90°/R6 per wegnaamovergang.
+
+Tests: 172 (was 161). Build groen. Browser-smoke: Gantt toont vergunningsactiviteiten (projectduur nu realistisch gedreven door beslistermijnen).

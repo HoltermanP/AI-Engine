@@ -6,6 +6,38 @@ import { generateBoreDrawings } from '@/lib/drawings/bore-index';
 import type { BoreEngineeringResult } from '@/lib/bore/types';
 import type { DrawingResult } from '@/lib/drawings/types';
 import { saveBoreEngineeringToDossier } from '@/lib/dossier/store';
+import { parseGef } from '@/lib/connectors/gef/parse-gef';
+import { addDemoSonderingen, getDemoUploadedSonderingen } from '@/lib/db/demo-store';
+
+/**
+ * GEF-CPT-upload: parse het bestand en voeg de sondering toe aan de sessie.
+ * Boorengineering pakt geüploade sonderingen binnen 500 m van een segment
+ * automatisch op (vóór demo-CPT's).
+ */
+export async function uploadGefAction(
+  bestandsnaam: string,
+  inhoud: string,
+): Promise<
+  | { ok: true; melding: string; sonderingId: string; aantalLagen: number; waarschuwingen: string[] }
+  | { ok: false; error: string }
+> {
+  try {
+    const resultaat = parseGef(inhoud, bestandsnaam.replace(/\.gef$/i, ''));
+    addDemoSonderingen([resultaat.sondering]);
+    return {
+      ok: true,
+      melding: `Sondering ${resultaat.sondering.id} geladen: ${resultaat.sondering.diepte} m diep, ${resultaat.sondering.lagen.length} lagen (dominant ${resultaat.sondering.grondsoort}). Totaal ${getDemoUploadedSonderingen().length} geüploade CPT('s).`,
+      sonderingId: resultaat.sondering.id,
+      aantalLagen: resultaat.sondering.lagen.length,
+      waarschuwingen: resultaat.waarschuwingen,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'GEF-bestand kon niet worden gelezen.',
+    };
+  }
+}
 
 export async function getSleuflozeSegmentenAction(traceId: string) {
   const trace = await getTrace(traceId);

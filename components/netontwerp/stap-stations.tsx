@@ -3,25 +3,48 @@
 import { useState, useTransition } from 'react';
 import type { Netontwerp, NetontwerpAsset } from '@/lib/netontwerp/types';
 import { STATION_SUBTYPE_LABELS, type StationSubtype } from '@/lib/netontwerp/types';
-import { suggestStationsAction } from '@/lib/actions/netontwerp';
+import { suggestStationsAction, genereerRingVerbindingAction } from '@/lib/actions/netontwerp';
 import type { StationsAdvies } from '@/lib/netontwerp/stations-advies';
 import { Button } from '@/components/ui/button';
-import { Building2, Loader2, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
+import { Building2, CircleDashed, Loader2, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
 
 interface StapStationsProps {
   ontwerp: Netontwerp;
   onOntwerpChange: (ontwerp: Netontwerp) => void;
   /** Stations gesorteerd langs het MS-tracé (ringvolgorde), indien MS-tracé aanwezig */
   ringVolgorde?: { stationId: string; naam: string; chainageM: number }[];
+  /** Nieuw ringtracé toevoegen aan de kaart (na genereerRingVerbindingAction) */
+  onRingTrace?: (traceId: string) => void;
 }
 
 let stationTeller = 0;
 
-export function StapStations({ ontwerp, onOntwerpChange, ringVolgorde = [] }: StapStationsProps) {
+export function StapStations({
+  ontwerp,
+  onOntwerpChange,
+  ringVolgorde = [],
+  onRingTrace,
+}: StapStationsProps) {
   const [advies, setAdvies] = useState<StationsAdvies | null>(null);
+  const [ringMelding, setRingMelding] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const stations = ontwerp.assets.filter((a) => a.type === 'station');
+  const ringStations = stations.filter((s) => s.subtype !== 'ls_verdeelkast');
+
+  const genereerRing = () => {
+    setRingMelding(null);
+    startTransition(async () => {
+      const resultaat = await genereerRingVerbindingAction(ontwerp);
+      if ('error' in resultaat) {
+        setRingMelding(resultaat.error);
+        return;
+      }
+      onOntwerpChange(resultaat.ontwerp);
+      onRingTrace?.(resultaat.trace.id);
+      setRingMelding(resultaat.samenvatting);
+    });
+  };
 
   const berekenAdvies = () => {
     startTransition(async () => {
@@ -99,14 +122,31 @@ export function StapStations({ ontwerp, onOntwerpChange, ringVolgorde = [] }: St
         )}
       </div>
 
-      {ringVolgorde.length > 1 && (
+      {(ringVolgorde.length > 1 || ringStations.length >= 2) && (
         <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-xs font-semibold">MS-ringvolgorde</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            voeding →{' '}
-            {ringVolgorde.map((r) => `${r.naam} (${(r.chainageM / 1000).toFixed(2)} km)`).join(' → ')}{' '}
-            → voeding
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold">MS-ring</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={pending || ringStations.length < 2}
+              onClick={genereerRing}
+            >
+              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <CircleDashed className="h-3 w-3" />}
+              Genereer ringverbinding
+            </Button>
+          </div>
+          {ringVolgorde.length > 1 && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              voeding →{' '}
+              {ringVolgorde.map((r) => `${r.naam} (${(r.chainageM / 1000).toFixed(2)} km)`).join(' → ')}{' '}
+              → voeding
+            </p>
+          )}
+          {ringMelding && (
+            <p className="mt-2 rounded-md bg-muted/60 p-2 text-[11px]">{ringMelding}</p>
+          )}
         </div>
       )}
 

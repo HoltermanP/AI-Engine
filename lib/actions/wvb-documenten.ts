@@ -24,6 +24,7 @@ import {
 } from '@/lib/services/proefsleuven';
 import { genereerVgPlan } from '@/lib/dossier/vg-plan';
 import { genereerKabeltrekplan } from '@/lib/dossier/kabeltrekplan';
+import { sectiesUitTraceLines } from '@/lib/dossier/trekvak-geometrie';
 import type { TraceSectie } from '@/lib/calc/kabeltrek';
 import { traceLengthM } from '@/lib/geo';
 
@@ -212,17 +213,14 @@ export async function genereerKabeltrekplanAction(
     }
     const isMs = trace.discipline === 'elektra_ms';
 
-    // Vereenvoudiging: trace.segmenten worden omgezet naar rechte secties;
-    // tussen segmenten met een verschillende wegnaam wordt een bocht van
-    // 90° met R = 6 m verondersteld (haakse wegovergang).
-    const secties: TraceSectie[] = [];
-    trace.segmenten.forEach((seg, i) => {
-      const vorige = trace.segmenten[i - 1];
-      if (vorige && vorige.wegnaam !== seg.wegnaam) {
-        secties.push({ type: 'bocht', hoekDeg: 90, radiusM: 6 });
-      }
-      secties.push({ type: 'recht', lengteM: seg.lengteM });
-    });
+    // Secties uit de werkelijke tracégeometrie (rechtstanden + bochten met
+    // echte hoeken); fallback op segmentlengtes wanneer er geen polyline is.
+    let secties: TraceSectie[] = sectiesUitTraceLines(
+      trace.traceLines.length ? trace.traceLines : [trace.coordinates],
+    );
+    if (secties.length === 0) {
+      secties = trace.segmenten.map((seg) => ({ type: 'recht' as const, lengteM: seg.lengteM }));
+    }
     if (secties.length === 0) {
       secties.push({ type: 'recht', lengteM: traceLengte(trace) });
     }

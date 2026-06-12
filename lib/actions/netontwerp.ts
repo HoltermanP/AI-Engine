@@ -16,7 +16,13 @@ import {
   type KabelAdvies,
 } from '@/lib/netontwerp/kabel-catalogus';
 import { totaalBelastingKVA, stroomUitKVA } from '@/lib/netontwerp/belastingen';
-import { adviseerStations, type StationsAdvies } from '@/lib/netontwerp/stations-advies';
+import {
+  adviseerStations,
+  bepaalRingVolgorde,
+  type StationsAdvies,
+} from '@/lib/netontwerp/stations-advies';
+import { planAutomaticTraceAction } from './trace-routing';
+import { routingSegmentsToTraceSegmenten } from '@/lib/services/trace-routing/persist';
 import { adviseerMoffen, adviseerMantelbuizen } from '@/lib/netontwerp/moffen-advies';
 import { bouwStationOntwerp } from '@/lib/netontwerp/station-ontwerp';
 import { lijnLengteM } from '@/lib/netontwerp/chainage';
@@ -51,6 +57,11 @@ export async function getNetontwerpAction(projectId: string): Promise<Netontwerp
 
 export async function saveNetontwerpAction(ontwerp: Netontwerp): Promise<Netontwerp> {
   return saveDemoNetontwerp(ontwerp);
+}
+
+/** Verse tracédata (bijv. een zojuist gegenereerd ringtracé) voor de kaart. */
+export async function getNetontwerpTracesAction(traceIds: string[]): Promise<DemoTrace[]> {
+  return traceIds.map((id) => getDemoTrace(id)).filter((t): t is DemoTrace => t !== null);
 }
 
 /**
@@ -301,6 +312,106 @@ export async function genereerStationsontwerpenAction(
     );
 
   return saveDemoNetontwerp({ ...ontwerp, stationsOntwerpen: ontwerpen });
+}
+
+/**
+ * MS-ringverbinding: routeer met de bestaande router (A* op het wegennet)
+ * langs alle stations in ringvolgorde en maak daarvan een echt MS-tracé.
+ */
+export async function genereerRingVerbindingAction(
+  ontwerp: Netontwerp,
+): Promise<{ ontwerp: Netontwerp; trace: DemoTrace; samenvatting: string } | { error: string }> {
+  const stations = ontwerp.assets
+    .filter((a) => a.type === 'station' && a.positie.binding === 'punt' && a.subtype !== 'ls_verdeelkast')
+    .map((a) => {
+      const pos = a.positie as { x: number; y: number };
+      return { id: a.id, naam: a.naam, x: pos.x, y: pos.y };
+    });
+  if (stations.length < 2) {
+    return { error: 'Minimaal 2 stations nodig voor een ringverbinding (stap 4).' };
+  }
+
+  // Ringvolgorde: langs bestaand MS-tracé als dat er is, anders nearest-neighbor
+  const msTrace = ontwerp.traceIds
+    .map((id) => getDemoTrace(id))
+    .find((t) => t?.discipline === 'elektra_ms' && t.coordinates.length >= 2);
+  let geordend = stations;
+  if (msTrace) {
+    const volgorde = bepaalRingVolgorde(stations, msTrace.traceLines as TraceLines);
+    if (volgorde.length === stations.length) {
+      geordend = volgorde.map((v) => stations.find((s) => s.id === v.stationId)!);
+    }
+  } else {
+    const rest = [...stations];
+    geordend = [rest.shift()!];
+    while (rest.length) {
+      const laatste = geordend[geordend.length - 1];
+      rest.sort(
+        (a, b) =>
+          Math.hypot(a.x - laatste.x, a.y - laatste.y) -
+          Math.hypot(b.x - laatste.x, b.y - laatste.y),
+      );
+      geordend.push(rest.shift()!);
+    }
+  }
+
+  const msKeuze = ontwerp.kabelKeuzes
+    .map((k) => getKabelSpec(k.kabelId))
+    .find((k) => k?.netvlak === 'MS');
+  const netType = msKeuze?.label ?? `${ontwerp.uitgangspunten.spanningMsKV}kV XLPE 3x1x240 Al`;
+
+  const result = await planAutomaticTraceAction({
+    waypoints: geordend.map((s) => ({ x: s.x, y: s.y, label: s.naam })),
+    discipline: 'elektra_ms',
+    projectId: ontwerp.projectId,
+    vereisteDekking: 1.0,
+    netType,
+    useAi: false,
+  });
+  if (!result.coordinates.length) {
+    return { error: 'Router vond geen route langs de stations — verplaats stations dichter bij het wegennet.' };
+  }
+
+  const bestaandeRingen = getDemoTraces(ontwerp.projectId).filter((t) =>
+    t.id.startsWith(`trace-ms-ring-${ontwerp.projectId}`),
+  ).length;
+  const id = `trace-ms-ring-${ontwerp.projectId}-${bestaandeRingen + 1}`;
+  const trace: DemoTrace = {
+    id,
+    projectId: ontwerp.projectId,
+    code: `EL-MS-RING-${String(bestaandeRingen + 1).padStart(2, '0')}`,
+    naam: `MS-ring ${geordend.map((s) => s.naam).join(' → ')}`,
+    discipline: 'elektra_ms',
+    netType,
+    fase: 'VO',
+    vereisteDekking: 1.0,
+    kleur: '#c80000',
+    wegnaam: result.segmenten[0]?.wegnaam ?? '',
+    leglocatie: 'berm',
+    omschrijving: `Ringverbinding tussen ${geordend.length} stations, gerouteerd op het wegennet (score ${result.score}/100).`,
+    coordinates: result.coordinates,
+    traceLines: result.traceLines,
+    segmenten: routingSegmentsToTraceSegmenten(result.segmenten),
+  };
+  addDemoTrace(trace);
+
+  // Koppel stations aan het nieuwe ringtracé
+  const assets = ontwerp.assets.map((a) =>
+    stations.some((s) => s.id === a.id)
+      ? { ...a, gekoppeldeTraceIds: [...new Set([...a.gekoppeldeTraceIds, id])] }
+      : a,
+  );
+  const bijgewerkt = await saveDemoNetontwerp({
+    ...ontwerp,
+    assets,
+    traceIds: [...ontwerp.traceIds, id],
+  });
+
+  return {
+    ontwerp: bijgewerkt,
+    trace,
+    samenvatting: `${result.totaleLengteM.toFixed(0)} m ring langs ${geordend.length} stations: ${geordend.map((s) => s.naam).join(' → ')} (route-score ${result.score}/100)`,
+  };
 }
 
 /** SVG-tekeningen per station: eenlijnschema + plattegrond. */

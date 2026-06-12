@@ -9,9 +9,9 @@ import type { BoreEngineeringResult, BoreSegmentResult } from '@/lib/bore/types'
 import { BORE_METHODE_LABELS } from '@/lib/bore/types';
 import { sleuflozeSegmenten } from '@/lib/bore';
 import type { DrawingResult } from '@/lib/drawings/types';
-import { runVolledigeBoorengineeringAction } from '@/lib/actions/bore-engineering';
+import { runVolledigeBoorengineeringAction, uploadGefAction } from '@/lib/actions/bore-engineering';
 import { downloadSvgAsPdf } from '@/lib/export/download';
-import { Drill, FileImage, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Drill, FileImage, FileUp, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface BoreEngineeringPanelProps {
   trace: DemoTrace;
@@ -30,9 +30,24 @@ export function BoreEngineeringPanel({ trace, disabled }: BoreEngineeringPanelPr
   const [selected, setSelected] = useState<number[]>(() => segments.map((s) => s.volgorde));
   const [result, setResult] = useState<BoreEngineeringResult | null>(null);
   const [tekeningen, setTekeningen] = useState<DrawingResult[]>([]);
+  const [gefMelding, setGefMelding] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (segments.length === 0) return null;
+
+  function handleGefUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      startTransition(async () => {
+        const res = await uploadGefAction(file.name, String(reader.result ?? ''));
+        setGefMelding(res.ok ? `✓ ${res.melding}` : `✗ ${res.error}`);
+      });
+    };
+    reader.readAsText(file);
+  }
 
   function toggle(volgorde: number) {
     setSelected((prev) =>
@@ -63,20 +78,38 @@ export function BoreEngineeringPanel({ trace, disabled }: BoreEngineeringPanelPr
             </p>
           </div>
         </div>
-        <Button
-          size="sm"
-          onClick={handleUitwerken}
-          disabled={disabled || isPending || selected.length === 0}
-          className="bg-orange-600 hover:bg-orange-600/90"
-        >
-          {isPending ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <Drill className="mr-1 h-3 w-3" />
-          )}
-          Uitwerken ({selected.length})
-        </Button>
+        <div className="flex items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted">
+            <FileUp className="h-3 w-3" />
+            GEF-sondering
+            <input
+              type="file"
+              accept=".gef,.GEF,.txt"
+              className="hidden"
+              onChange={handleGefUpload}
+              disabled={disabled || isPending}
+            />
+          </label>
+          <Button
+            size="sm"
+            onClick={handleUitwerken}
+            disabled={disabled || isPending || selected.length === 0}
+            className="bg-orange-600 hover:bg-orange-600/90"
+          >
+            {isPending ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Drill className="mr-1 h-3 w-3" />
+            )}
+            Uitwerken ({selected.length})
+          </Button>
+        </div>
       </div>
+      {gefMelding && (
+        <p className="mb-3 rounded-md bg-muted/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+          {gefMelding} — geüploade CPT&apos;s worden bij de eerstvolgende uitwerking gebruikt.
+        </p>
+      )}
 
       <div className="mb-4 space-y-2">
         {segments.map((seg) => {

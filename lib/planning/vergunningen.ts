@@ -37,6 +37,30 @@ export interface VergunningInput {
 const TERMIJN_REGULIER_WEKEN = 8;
 const TERMIJN_UITGEBREID_WEKEN = 26;
 
+/** Leid de vergunningkenmerken af uit de tracékruisingen en -omschrijving. */
+export function vergunningInputUitTrace(trace: {
+  segmenten: { kruisingen?: { type: string; naam?: string; beheerder?: string }[] }[];
+  leglocatie: string;
+  omschrijving: string;
+}): VergunningInput {
+  const kruisingen = trace.segmenten.flatMap((s) => s.kruisingen ?? []);
+  const tekst = trace.omschrijving.toLowerCase();
+  return {
+    kruistWater: kruisingen.some((k) => k.type === 'water'),
+    kruistPrimaireWaterkering: kruisingen.some(
+      (k) => k.type === 'water' && /kering|dijk/i.test(k.naam ?? ''),
+    ),
+    kruistSpoor: kruisingen.some((k) => k.type === 'spoor'),
+    kruistRijksweg: kruisingen.some(
+      (k) => k.type === 'weg' && /rijkswaterstaat/i.test(k.beheerder ?? ''),
+    ),
+    inNatura2000: tekst.includes('natura'),
+    inArcheologischVerwachtingsgebied: tekst.includes('archeolog'),
+    privaatTerrein: trace.leglocatie.includes('privaat') || tekst.includes('zakelijk recht'),
+    openbareGrondGemeente: true,
+  };
+}
+
 /** Stel de vergunningenlijst samen op basis van tracé-kenmerken. */
 export function deriveVergunningen(input: VergunningInput): VergunningItem[] {
   const items: VergunningItem[] = [];

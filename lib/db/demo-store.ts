@@ -141,8 +141,25 @@ export function getDemoReferentieTraces(): DemoReferentieTrace[] {
   return referentieTraces;
 }
 
+/** Via GEF-upload toegevoegde sonderingen (sessie; geen migraties). */
+const uploadedSonderingen: (typeof DEMO_SONDERINGEN)[number][] = [];
+
+export function addDemoSonderingen(items: (typeof DEMO_SONDERINGEN)[number][]): void {
+  for (const item of items) {
+    const idx = uploadedSonderingen.findIndex((s) => s.id === item.id);
+    if (idx >= 0) uploadedSonderingen[idx] = item;
+    else uploadedSonderingen.push(item);
+  }
+}
+
+export function getDemoUploadedSonderingen() {
+  return uploadedSonderingen;
+}
+
 export function getDemoSonderingen() {
-  return DEMO_SONDERINGEN;
+  return uploadedSonderingen.length
+    ? [...DEMO_SONDERINGEN, ...uploadedSonderingen]
+    : DEMO_SONDERINGEN;
 }
 
 export function getDemoGrondwater() {

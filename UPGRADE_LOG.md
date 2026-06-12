@@ -114,3 +114,12 @@ Tests: 177. Build groen. Browser-verificatie: status bijwerken → reload → st
 7. **Bulk-invoer aansluitingen**: "Plak uit Excel/CSV" in netontwerp stap 1 (naam;type;aantal[;kVA;g], decimale komma's en kopregels ondersteund); punten worden gelijkmatig 25 m naast het tracé gespreid en zijn daarna versleepbaar.
 
 Tests: 179. Build groen (17 routes). Browser-verificatie: palette-navigatie, wizard-redirect, CSV-import met toast, ZIP-download (200, application/zip), termijnwidget op dashboard — zonder consolefouten.
+
+### Uitvoeringsmap in leesbare formaten (2026-06-12)
+- **Tekstdocumenten → PDF**: server-side markdown-renderer (lib/export/server-pdf.ts, jsPDF: koppen, lijsten, checkboxes, tabellen, paginering + voettekst) voor leeswijzer, uitvoeringsmap per tracé, onderzoeken, vergunningen en rapporten.
+- **Tekeningen → PDF én DXF**: SVG's worden server-side gerasterd (@resvg/resvg-js, 2200 px breed) en op A3-liggend geplaatst met titel en verwijzing naar de DXF; daarnaast per tracé verse DXF-varianten (situatie, werktekening, boorplan/boorprofiel bij sleufloze segmenten) in 02-tekeningen/dxf/. `serverExternalPackages: ['@resvg/resvg-js']` in next.config (native binary niet bundelen).
+- **Berekeningen → Excel**: alle CalcResult-dossieritems in één werkboek (lib/export/berekeningen-excel.ts: invoer/resultaat/aannames/conclusie per rij); 06-calculatie bevat verse projectcalculatie- en materiaallijst-Excels.
+- **DXF-varianten gedeeld**: dxfVariant verplaatst naar lib/export/dxf-varianten.ts (export-API + ZIP gebruiken dezelfde generator).
+- Mislukte conversies degraderen netjes (SVG/MD-fallback + 99-opmerkingen.txt).
+
+Tests: 182. Geverifieerd: ZIP met geldige meerpagina-PDF's, 4 DXF's, 2 Excels; werktekening-PDF visueel gecontroleerd (tracé, moffen, mantelbuizen, station, titelblok).

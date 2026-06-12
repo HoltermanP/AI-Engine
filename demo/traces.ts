@@ -1389,7 +1389,7 @@ export const DEMO_TRACES: DemoTrace[] = [
         "wegnaam": "Purmerend-Zuid 4",
         "leglocatie": "berm",
         "legtechniek": "hdd",
-        "lengteM": 1166,
+        "lengteM": 1170,
         "kruisingen": [
           {
             "type": "water",
@@ -1466,24 +1466,6 @@ export const DEMO_TRACES: DemoTrace[] = [
           },
           {
             "type": "weg",
-            "naam": "Vooruitstraat",
-            "legtechniek": "sleufloos",
-            "normReferentie": "AVOI gemeente · NEN 7171",
-            "methode": "nanodrill",
-            "methodeLabel": "Nanodrill (kleine gestuurde boring)",
-            "beheerder": "Gemeente (AVOI)",
-            "vergunning": "Instemmingsbesluit gemeente (AVOI)",
-            "afweging": [
-              "Nanodrill gekozen: asfalt rijbaan blijft intact, minimale verkeershinder",
-              "Asfaltzagen alternatief bij gelijktijdige wegwerkzaamheden (bespaart degeneratiekosten)",
-              "Avegaarboring of persing alternatief bij grotere diameters of bundels (mantelbuis)",
-              "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
-            ],
-            "x": 124947.5,
-            "y": 502295.9
-          },
-          {
-            "type": "weg",
             "naam": "Melkwegbrug",
             "legtechniek": "sleufloos",
             "normReferentie": "AVOI gemeente · NEN 7171",
@@ -1497,8 +1479,8 @@ export const DEMO_TRACES: DemoTrace[] = [
               "Avegaarboring of persing alternatief bij grotere diameters of bundels (mantelbuis)",
               "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
             ],
-            "x": 124881.4,
-            "y": 502275.3
+            "x": 124898.3,
+            "y": 502284.3
           },
           {
             "type": "weg",
@@ -1538,7 +1520,7 @@ export const DEMO_TRACES: DemoTrace[] = [
           },
           {
             "type": "weg",
-            "naam": "Jaagweg",
+            "naam": "Tramplein",
             "legtechniek": "sleufloos",
             "normReferentie": "AVOI gemeente · NEN 7171",
             "methode": "nanodrill",
@@ -1551,8 +1533,8 @@ export const DEMO_TRACES: DemoTrace[] = [
               "Avegaarboring of persing alternatief bij grotere diameters of bundels (mantelbuis)",
               "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
             ],
-            "x": 124937.8,
-            "y": 502296.2
+            "x": 124924.2,
+            "y": 502297.9
           },
           {
             "type": "weg",
@@ -1624,42 +1606,6 @@ export const DEMO_TRACES: DemoTrace[] = [
           },
           {
             "type": "weg",
-            "naam": "OV-baan · gesloten verharding",
-            "legtechniek": "sleufloos",
-            "normReferentie": "AVOI gemeente · NEN 7171",
-            "methode": "nanodrill",
-            "methodeLabel": "Nanodrill (kleine gestuurde boring)",
-            "beheerder": "Gemeente (AVOI)",
-            "vergunning": "Instemmingsbesluit gemeente (AVOI)",
-            "afweging": [
-              "Nanodrill gekozen: asfalt rijbaan blijft intact, minimale verkeershinder",
-              "Asfaltzagen alternatief bij gelijktijdige wegwerkzaamheden (bespaart degeneratiekosten)",
-              "Avegaarboring of persing alternatief bij grotere diameters of bundels (mantelbuis)",
-              "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
-            ],
-            "x": 124937.1,
-            "y": 502296.3
-          },
-          {
-            "type": "weg",
-            "naam": "fietspad · open verharding",
-            "legtechniek": "open_ontgraving",
-            "normReferentie": "AVOI gemeente · CROW 500",
-            "methode": "bestrating_openen",
-            "methodeLabel": "Bestrating openen + herstraten",
-            "beheerder": "Gemeente (AVOI)",
-            "vergunning": "Instemmingsbesluit gemeente (AVOI)",
-            "afweging": [
-              "Bestrating openen gekozen: elementenverharding kan worden herstraat",
-              "Boring afgewezen: onnodig kostbaar bij open verharding",
-              "Herstel en degeneratievergoeding conform AVOI",
-              "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
-            ],
-            "x": 124951.4,
-            "y": 502295.8
-          },
-          {
-            "type": "weg",
             "naam": "voetgangersgebied · open verharding",
             "legtechniek": "open_ontgraving",
             "normReferentie": "AVOI gemeente · CROW 500",
@@ -1673,8 +1619,8 @@ export const DEMO_TRACES: DemoTrace[] = [
               "Herstel en degeneratievergoeding conform AVOI",
               "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
             ],
-            "x": 124918.9,
-            "y": 502294
+            "x": 124925.9,
+            "y": 502298.8
           },
           {
             "type": "weg",
@@ -1696,6 +1642,42 @@ export const DEMO_TRACES: DemoTrace[] = [
           },
           {
             "type": "weg",
+            "naam": "OV-baan · gesloten verharding",
+            "legtechniek": "sleufloos",
+            "normReferentie": "AVOI gemeente · NEN 7171",
+            "methode": "nanodrill",
+            "methodeLabel": "Nanodrill (kleine gestuurde boring)",
+            "beheerder": "Gemeente (AVOI)",
+            "vergunning": "Instemmingsbesluit gemeente (AVOI)",
+            "afweging": [
+              "Nanodrill gekozen: asfalt rijbaan blijft intact, minimale verkeershinder",
+              "Asfaltzagen alternatief bij gelijktijdige wegwerkzaamheden (bespaart degeneratiekosten)",
+              "Avegaarboring of persing alternatief bij grotere diameters of bundels (mantelbuis)",
+              "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
+            ],
+            "x": 124913.7,
+            "y": 502292.4
+          },
+          {
+            "type": "weg",
+            "naam": "fietspad · open verharding",
+            "legtechniek": "open_ontgraving",
+            "normReferentie": "AVOI gemeente · CROW 500",
+            "methode": "bestrating_openen",
+            "methodeLabel": "Bestrating openen + herstraten",
+            "beheerder": "Gemeente (AVOI)",
+            "vergunning": "Instemmingsbesluit gemeente (AVOI)",
+            "afweging": [
+              "Bestrating openen gekozen: elementenverharding kan worden herstraat",
+              "Boring afgewezen: onnodig kostbaar bij open verharding",
+              "Herstel en degeneratievergoeding conform AVOI",
+              "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
+            ],
+            "x": 124949.7,
+            "y": 502301.8
+          },
+          {
+            "type": "weg",
             "naam": "rijbaan lokale weg · gesloten verharding",
             "legtechniek": "sleufloos",
             "normReferentie": "AVOI gemeente · NEN 7171",
@@ -1709,8 +1691,8 @@ export const DEMO_TRACES: DemoTrace[] = [
               "Avegaarboring of persing alternatief bij grotere diameters of bundels (mantelbuis)",
               "Liander: kruising uitvoeren in mantelbuis, kabel doorgaand zonder mof onder de kruising"
             ],
-            "x": 124897.4,
-            "y": 502283.2
+            "x": 124897.2,
+            "y": 502283.7
           },
           {
             "type": "weg",
@@ -1902,37 +1884,42 @@ export const DEMO_TRACES: DemoTrace[] = [
           -0.65
         ],
         [
-          124901,
-          502285,
+          124907,
+          502288.9,
           -0.65
         ],
         [
-          124924.3,
-          502296.7,
+          124936.5,
+          502304.4,
           -0.65
         ],
         [
-          124964.6,
-          502295.3,
+          124946.5,
+          502303.2,
           -0.65
         ],
         [
-          124985.5,
-          502283.8,
+          124964.2,
+          502295.4,
           -0.65
         ],
         [
-          125009.6,
-          502262.2,
+          124994.2,
+          502278,
           -0.65
         ],
         [
-          125033.9,
-          502240.5,
+          125015.4,
+          502258.3,
           -0.65
         ],
         [
-          125058.3,
+          125036.8,
+          502238.5,
+          -0.65
+        ],
+        [
+          125058.2,
           502218.7,
           -0.65
         ]
@@ -2105,37 +2092,42 @@ export const DEMO_TRACES: DemoTrace[] = [
         -0.65
       ],
       [
-        124901,
-        502285,
+        124907,
+        502288.9,
         -0.65
       ],
       [
-        124924.3,
-        502296.7,
+        124936.5,
+        502304.4,
         -0.65
       ],
       [
-        124964.6,
-        502295.3,
+        124946.5,
+        502303.2,
         -0.65
       ],
       [
-        124985.5,
-        502283.8,
+        124964.2,
+        502295.4,
         -0.65
       ],
       [
-        125009.6,
-        502262.2,
+        124994.2,
+        502278,
         -0.65
       ],
       [
-        125033.9,
-        502240.5,
+        125015.4,
+        502258.3,
         -0.65
       ],
       [
-        125058.3,
+        125036.8,
+        502238.5,
+        -0.65
+      ],
+      [
+        125058.2,
         502218.7,
         -0.65
       ]

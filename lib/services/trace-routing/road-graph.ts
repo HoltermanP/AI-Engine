@@ -870,7 +870,9 @@ function edgeCostForIdx(
   if (geom.boomKritiek > 0) cost *= 6 ** Math.min(geom.boomKritiek, 3);
   else if (geom.boomWortelzone > 0) cost *= 1.5;
   if (geom.privaatCount > 0) {
-    const mult = options?.profile === 'avoid_private' ? 8 : 3;
+    // Richtlijn: zo min mogelijk door privaat terrein — alleen wanneer er
+    // werkelijk geen openbare route is, wordt privaat geaccepteerd
+    const mult = options?.profile === 'avoid_private' ? 10 : 5;
     cost *= mult ** geom.privaatCount;
   }
   if (geom.publiekCount > 0) cost *= 0.9;

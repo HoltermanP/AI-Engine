@@ -131,3 +131,9 @@ Visuele audit van alle 10 tekeningtypes (scripts/render-tekeningen-audit.ts rast
 - **Boorplan**: tekenschaal uit de standaardreeks NEN-EN-ISO 5455 (1:100…1:5000) en op wáre schaal gecentreerd in het vlak; NEN-maatlijn met pijlpunten (hart startput—hart eindput); eindput-afmeting toegevoegd; dubbele methode-vermelding in de ondertitel weg.
 - **Lengteprofiel**: verticaal bereik strak om het profiel (geen lege onderhelft), NAP-as binnen het kader.
 - **Geldige SVG**: onbalans in <g>-tags (kruisingsdetail) en rauwe tooltip-tekst zonder <title>/escaping (titelblok-cellen, brak op "V&G") gerepareerd — alle tekeningen parsen nu strikt (resvg) en rasteren dus ook correct in de uitvoeringsmap-PDF's.
+
+### Automatische tracébepaling aangescherpt + demo-tracés geregenereerd (2026-06-12)
+- **Pand-veilige vereenvoudiging**: Douglas-Peucker draaide ná de pandcontrole en kon hoeken door een pand afsnijden; gladdeRoute valt nu terug op de niet-vereenvoudigde lijn zodra de vereenvoudiging een doorsnijding zou introduceren.
+- **Privaat terrein zwaarder gestraft**: kostmultiplier 3→5 per privaat perceel (avoid_private 8→10) — privaat alleen wanneer er werkelijk geen openbare route is.
+- **Alle 10 demo-tracés opnieuw ontworpen** met de aangescherpte engine op live PDOK-data (wegvolgend per constructie, elk tracé volgt een benoemde weg, 908–1361 m).
+- **Geautomatiseerde pand-controle**: alle tracés tegen live BGT-bebouwing geverifieerd (tot 11.119 panden per corridor) — 10/10 pand-vrij.

@@ -228,7 +228,13 @@ function gladdeRoute(
   line: [number, number][],
   ctx: RoutingContext
 ): [number, number][] {
-  return simplifyLine(verwijderSpikes(line, ctx.pandPolygonen), 1.5);
+  const zonderSpikes = verwijderSpikes(line, ctx.pandPolygonen);
+  const vereenvoudigd = simplifyLine(zonderSpikes, 1.5);
+  // Harde eis: vereenvoudiging mag nooit een hoek door een pand afsnijden —
+  // anders de niet-vereenvoudigde (pand-veilige) lijn aanhouden
+  return routeCrossesBuildings(vereenvoudigd, ctx.pandPolygonen)
+    ? zonderSpikes
+    : vereenvoudigd;
 }
 
 function routeCrossesBuildings(

@@ -102,6 +102,7 @@ const breadcrumbLabels: Record<string, string> = {
   acties: 'Open acties',
   beheer: 'Beheer',
   project: 'Project',
+  netontwerp: 'Netontwerp',
   dossier: 'Dossier',
   planning: 'Planning',
   config: 'Configuratie',
@@ -168,6 +169,7 @@ function ProjectContextPanel({ projectId, pathname }: { projectId: string; pathn
           );
           const active =
             (step.id === 'overzicht' && pathname === `/project/${projectId}`) ||
+            (step.id === 'netontwerp' && pathname.includes('/netontwerp')) ||
             (step.id === 'trace' && pathname.includes('/trace/')) ||
             (step.id === 'planning' && pathname.includes('/planning')) ||
             (step.id === 'dossier' && pathname.includes('/dossier')) ||

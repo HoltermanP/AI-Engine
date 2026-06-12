@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   FolderKanban,
+  Network,
   GitBranch,
   CalendarDays,
   FolderOpen,
@@ -9,6 +10,7 @@ import {
 
 export type ProjectProcessStepId =
   | 'overzicht'
+  | 'netontwerp'
   | 'trace'
   | 'planning'
   | 'dossier'
@@ -36,9 +38,18 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     href: (projectId) => `/project/${projectId}`,
   },
   {
-    id: 'trace',
+    id: 'netontwerp',
     nummer: 2,
     label: 'Stap 2',
+    titel: 'Netontwerp',
+    beschrijving: 'Belastingen, kabelkeuze, stations en werktekening (elektra LS/MS)',
+    icon: Network,
+    href: (projectId) => `/project/${projectId}/netontwerp`,
+  },
+  {
+    id: 'trace',
+    nummer: 3,
+    label: 'Stap 3',
     titel: 'Tracé-engineering',
     beschrijving: 'Ontwerp, data, engineering, omgeving en dossier per tracé',
     icon: GitBranch,
@@ -49,8 +60,8 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
   },
   {
     id: 'planning',
-    nummer: 3,
-    label: 'Stap 3',
+    nummer: 4,
+    label: 'Stap 4',
     titel: 'Planning',
     beschrijving: 'Activiteiten, milestones en Gantt-overzicht',
     icon: CalendarDays,
@@ -58,8 +69,8 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
   },
   {
     id: 'dossier',
-    nummer: 4,
-    label: 'Stap 4',
+    nummer: 5,
+    label: 'Stap 5',
     titel: 'Dossier',
     beschrijving: 'Documenten, tekeningen en rapporten bundelen',
     icon: FolderOpen,
@@ -67,8 +78,8 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
   },
   {
     id: 'rapportage',
-    nummer: 5,
-    label: 'Stap 5',
+    nummer: 6,
+    label: 'Stap 6',
     titel: 'Rapportage',
     beschrijving: 'Projectstatus en inzichten delen',
     icon: FileBarChart,
@@ -77,6 +88,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
 ];
 
 export function resolveProjectProcessStep(pathname: string): ProjectProcessStepId {
+  if (pathname.includes('/netontwerp')) return 'netontwerp';
   if (pathname.includes('/trace/')) return 'trace';
   if (pathname.includes('/planning')) return 'planning';
   if (pathname.includes('/dossier')) return 'dossier';

@@ -86,3 +86,12 @@
 4. **Kabeltrekplan-trekvakken uit echte geometrie**: `lib/dossier/trekvak-geometrie.ts` leidt rechtstanden + bochten (werkelijke hoeken, knikken <15° genegeerd, knikken binnen 2 m samengevoegd) af uit de tracé-polyline; vervangt de aanname 90°/R6 per wegnaamovergang.
 
 Tests: 172 (was 161). Build groen. Browser-smoke: Gantt toont vergunningsactiviteiten (projectduur nu realistisch gedreven door beslistermijnen).
+
+## 2026-06-12 — Procesevaluatie + beheersing t/m start uitvoering
+
+Volledige app-walkthrough (screenshots alle hoofdpagina's) en verbeteringen:
+1. **Startgereedheid-cockpit (go/no-go-gate)**: `lib/services/startgereedheid.ts` beoordeelt per project 11 werkvoorbereidingscriteria (ontwerp ≥ DO, netontwerp-stappen, berekeningen, UO-werktekeningen, onderzoeken, vergunningen incl. kritieke beslistermijn, V&G, kabeltrekplan, boorengineering, calculatie, KLIC-melding ≤ 20 werkdagen) met verdict GO/BIJNA/NO-GO. Visuele cockpit (`components/start-uitvoering-panel.tsx`, voortgangsring + statusbadge + checklist met deep-links per criterium) prominent op de projectpagina — dit maakt het doel "beheersing t/m start uitvoering" zichtbaar in één oogopslag.
+2. **Netontwerp in de Werkruimte-navigatie**: stap 2 in het projectproces (sidebar + breadcrumb), genummerd proces is nu 6 stappen (overzicht → netontwerp → tracé → planning → dossier → rapportage).
+3. **Dossier-lege-staat**: begeleidende proceskaarten (engineering → omgeving → werkvoorbereiding) met links i.p.v. een kale melding.
+
+Tests: 176. Build groen. Browser-verificatie zonder fouten.

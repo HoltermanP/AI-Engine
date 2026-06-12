@@ -220,19 +220,53 @@ export default function DossierPage() {
 
         {items.length === 0 ? (
           <Card>
-            <CardContent className="p-8 text-center">
-              <FileText className="mx-auto h-8 w-8 text-muted-foreground/40" />
-              <p className="mt-3 text-sm text-muted-foreground">
-                Dossier is nog leeg. Ga naar een tracé en klik &quot;Genereer volledig dossier&quot;.
-              </p>
-              {firstTrace ? (
-                <Link
-                  href={`/project/${projectId}/trace/${firstTrace.id}`}
-                  className="mt-3 inline-block text-sm text-[#2D6FE8] hover:underline"
-                >
-                  Naar tracé →
-                </Link>
-              ) : null}
+            <CardContent className="p-8">
+              <div className="text-center">
+                <FileText className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                <p className="mt-3 text-sm font-medium">Het dossier vult zich vanuit het proces</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Elke stap legt zijn producten hier automatisch vast — zo groeit het dossier mee tot
+                  de complete uitvoeringsmap.
+                </p>
+              </div>
+              <div className="mx-auto mt-6 grid max-w-2xl gap-3 sm:grid-cols-3">
+                {[
+                  {
+                    stap: '1',
+                    titel: 'Engineering',
+                    tekst: 'Berekeningen, tekeningen en boorplannen uit fase 3 / het netontwerp',
+                    href: firstTrace ? `/project/${projectId}/trace/${firstTrace.id}` : undefined,
+                    label: 'Naar tracé-engineering',
+                  },
+                  {
+                    stap: '2',
+                    titel: 'Omgeving',
+                    tekst: 'Quickscans, vergunningchecklist en aanvragen uit fase 4',
+                    href: firstTrace ? `/project/${projectId}/trace/${firstTrace.id}` : undefined,
+                    label: 'Naar omgeving',
+                  },
+                  {
+                    stap: '3',
+                    titel: 'Werkvoorbereiding',
+                    tekst: 'V&G-plan, kabeltrekplan en uitvoeringsmap richting start uitvoering',
+                    href: `/project/${projectId}`,
+                    label: 'Bekijk startgereedheid',
+                  },
+                ].map((kaart) => (
+                  <div key={kaart.stap} className="rounded-lg border border-border bg-muted/30 p-3 text-left">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2D6FE8]/10 text-[11px] font-bold text-[#2D6FE8]">
+                      {kaart.stap}
+                    </span>
+                    <p className="mt-2 text-xs font-semibold">{kaart.titel}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{kaart.tekst}</p>
+                    {kaart.href && (
+                      <Link href={kaart.href} className="mt-2 inline-block text-[11px] font-medium text-[#2D6FE8] hover:underline">
+                        {kaart.label} →
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         ) : (

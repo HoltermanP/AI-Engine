@@ -9,6 +9,8 @@ import { VolgendeStapCta } from '@/components/volgende-stap-cta';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProgressBar } from '@/components/progress-bar';
 import { getProject, getTraces, getBestaandNet } from '@/lib/db/store';
+import { bepaalStartgereedheid } from '@/lib/services/startgereedheid';
+import { StartUitvoeringPanel } from '@/components/start-uitvoering-panel';
 import { deriveDeliverableStatuses } from '@/lib/process/deliverable-status';
 import { getProjectSummary, FASE_LABELS } from '@/lib/services/project-stats';
 import { DISCIPLINE_LABELS } from '@/lib/db/types';
@@ -39,6 +41,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const summary = await getProjectSummary(project);
   const firstTraceId = traces[0]?.id ?? null;
   const deliverableRecords = deriveDeliverableStatuses(traces);
+  const startgereedheid = bepaalStartgereedheid(id);
 
   return (
       <div className="flex flex-col lg:h-[calc(100dvh-3.5rem)]">
@@ -86,7 +89,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </div>
 
           <div className="flex-1 overflow-auto p-4">
-            <ProjectStatusOverview summary={summary} projectId={id} />
+            <StartUitvoeringPanel resultaat={startgereedheid} />
+
+            <div className="mt-6 border-t border-border/60 pt-4">
+              <ProjectStatusOverview summary={summary} projectId={id} />
+            </div>
 
             <div className="mt-6 border-t border-border/60 pt-4">
               <h2 className="section-heading mb-3 text-base">

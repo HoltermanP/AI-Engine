@@ -75,9 +75,9 @@ export function generateBorePlanDrawing(
   <rect x="${exitX - exitPutW / 2}" y="${midY - entryPutH / 2}" width="${exitPutW}" height="${entryPutH}" fill="${TEKENING_KLEUREN.waarschuwing}20" stroke="${TEKENING_KLEUREN.waarschuwing}" stroke-width="${NLCS_LIJNDIKTE.normaal}"/>
   <text x="${exitX}" y="${midY + entryPutH / 2 + 10}" text-anchor="middle" fill="${c.text}" font-size="6" font-family="IBM Plex Mono,monospace">Eindput</text>
 
-  <!-- Boortraject (volgt tracé in bovenaanzicht) -->
+  <!-- Boogtraject (volgt tracé in bovenaanzicht) -->
   <path d="${borePath}" fill="none" stroke="#E67E22" stroke-width="2.5" stroke-dasharray="6,3"/>
-  <text x="${entryX + boreLen / 2}" y="${midY + 14}" text-anchor="middle" fill="#E67E22" font-size="6" font-family="IBM Plex Mono,monospace">Boortraject R=${t.boogstraalM.toFixed(0)} m · diepte ${t.maxDiepteNap.toFixed(2)} m NAP (zie boorprofiel)</text>
+  <text x="${entryX + boreLen / 2}" y="${midY + 14}" text-anchor="middle" fill="#E67E22" font-size="6" font-family="IBM Plex Mono,monospace">Boogtraject R=${t.boogstraalM.toFixed(0)} m · diepte ${t.maxDiepteNap.toFixed(2)} m NAP (zie boorprofiel)</text>
 
   <!-- Tracélijn -->
   <line x1="${entryX}" y1="${midY - 14}" x2="${exitX}" y2="${midY - 14}" stroke="${trace.kleur}" stroke-width="3"/>

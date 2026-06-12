@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { boreProfilePoints } from './bore-profile';
+import { generateBoreDrawings } from './bore-index';
 import { maxDiepteNap, minBoogstraalM } from '@/lib/bore/formulas';
+import { runBoreEngineering, heeftSleuflozeSegmenten } from '@/lib/bore';
+import { DEMO_TRACES } from '@/demo/traces';
 import type { BoreTrajectory } from '@/lib/bore/types';
 
 function trajectory(maaiveldNap: number, dekking: number): BoreTrajectory {
@@ -32,6 +35,20 @@ describe('maxDiepteNap', () => {
   it('gaat nooit naar −7 m voor een standaard LS-boring', () => {
     const diepte = maxDiepteNap(-0.18, -0.75, 93.75, 12, 0.6, 125, 'hdd');
     expect(diepte).toBeGreaterThan(-4);
+  });
+});
+
+describe('volledige boortekeningen-pijplijn (regressie validator)', () => {
+  it('genereert geldige tekeningen voor alle demo-tracés met sleufloze segmenten', () => {
+    const boorTraces = DEMO_TRACES.filter((t) => heeftSleuflozeSegmenten(t));
+    expect(boorTraces.length).toBeGreaterThan(0);
+    for (const trace of boorTraces) {
+      const engineering = runBoreEngineering(trace);
+      // generateBoreDrawings draait valideerTekening en gooit bij ontbrekende
+      // verplichte elementen (zoals "Boogtraject") — mag dus nooit throwen
+      const tekeningen = generateBoreDrawings(trace, engineering);
+      expect(tekeningen.length, trace.code).toBeGreaterThan(0);
+    }
   });
 });
 

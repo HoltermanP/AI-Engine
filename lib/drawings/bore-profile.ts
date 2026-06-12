@@ -105,7 +105,7 @@ export function generateBoreProfileDrawing(
     schaal: `Hor. 1:500 · vert. overdreven`,
     legenda: [
       { label: 'Maaiveld', color: TEKENING_KLEUREN.maaiveld, strokeWidth: 2 },
-      { label: 'Boortraject (as)', color: '#E67E22', strokeWidth: 2.5 },
+      { label: 'Boogtraject (as)', color: '#E67E22', strokeWidth: 2.5 },
       { label: 'Productleiding', color: trace.kleur, strokeWidth: 2 },
       { label: 'Grondwater', color: '#3498DB', dash: '4,2', strokeWidth: 1 },
     ],
@@ -171,7 +171,7 @@ export function generateBoreProfileDrawing(
   <path d="${borePath}" fill="none" stroke="#E67E22" stroke-width="2.5"/>
   <path d="${borePath}" fill="none" stroke="${trace.kleur}" stroke-width="1" stroke-dasharray="1,3"/>
   ${dekkingMaat}
-  <text x="${tx(middenS)}" y="${bodemY + 12}" text-anchor="middle" fill="#E67E22" font-size="5" font-family="IBM Plex Mono,monospace">Boortraject — ontwerpdiepte ${traj.maxDiepteNap.toFixed(2)} m NAP</text>
+  <text x="${tx(middenS)}" y="${bodemY + 12}" text-anchor="middle" fill="#E67E22" font-size="5" font-family="IBM Plex Mono,monospace">Boogtraject — ontwerpdiepte ${traj.maxDiepteNap.toFixed(2)} m NAP</text>
   ${sonderingSvg}
   <text x="${pad.l + 8}" y="${pad.t + drawH - 8}" fill="${c.muted}" font-size="5" font-family="IBM Plex Sans,sans-serif">Legenda</text>
   <text x="${pad.l + drawW - 4}" y="${pad.t + 8}" text-anchor="end" fill="${c.muted}" font-size="5" font-family="IBM Plex Mono,monospace">${segmentProfielNummer(trace.code, segment.volgorde)}</text>

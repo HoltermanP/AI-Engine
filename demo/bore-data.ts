@@ -5,6 +5,7 @@ import type { TraceSegment } from '@/demo/roads';
 import { parseNetType } from '@/lib/calc/parse';
 import { maaiveldNapDefault } from '@/lib/calc/parse';
 import { analyseSonderingen, sonderingenVoorSegment } from '@/lib/bore/sonderingen';
+import { bepaalBoringen } from '@/lib/services/trace-routing/boringen';
 import {
   maxDiepteNap,
   minBoogstraalM,
@@ -145,11 +146,22 @@ export function buildBoreSegmentInput(trace: DemoTrace, seg: TraceSegment): Bore
     trace.vereisteDekking,
   );
 
+  // Een boring is een discreet traject onder het obstakel — niet het hele
+  // wegsegment. Bij een kruising met boring/persing geldt de maatgevende
+  // (langste) boringlengte; alleen bij segment-brede sleufloze ligging (LS/LD
+  // zonder discrete kruising) valt de lengte terug op de segmentlengte.
+  const boringenInSegment = bepaalBoringen(trace).filter(
+    (b) => b.segmentVolgorde === seg.volgorde
+  );
+  const lengteM = boringenInSegment.length
+    ? Math.max(...boringenInSegment.map((b) => b.lengteM))
+    : seg.lengteM;
+
   return {
     volgorde: seg.volgorde,
     methode: seg.legtechniek,
     wegnaam: seg.wegnaam,
-    lengteM: seg.lengteM,
+    lengteM,
     buisDiameterMm,
     productDiameterMm,
     maaiveldNap,

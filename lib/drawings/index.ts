@@ -1,10 +1,12 @@
 import type { DemoTrace } from '@/demo/traces';
 import type { DemoBestaandNet } from '@/demo/klic';
+import type { DetectedConflict } from '@/lib/services/conflict-detection';
 import type { DrawingResult } from './types';
 import { generateTracePlan } from './trace-plan';
 import { generateLengthProfile } from './length-profile';
 import { generateCrossSection } from './cross-section';
 import { generateCrossingDetail } from './crossing-detail';
+import { generateKnelpuntenOverzicht } from './knelpunten-overzicht';
 import { generateStationDrawing } from './station';
 import { valideerTekening } from './format';
 import { type TitelblokOpts } from './titelblok';
@@ -38,10 +40,10 @@ export type TekeningFase = 'vo' | 'do' | 'uo';
 const FASE_SET: Record<TekeningFase, DrawingResult['type'][]> = {
   // VO: situatie + AVOI-dwarsprofiel (voorkeursligging)
   vo: ['trace_plan', 'cross_section'],
-  // DO: volledige ontwerpset
-  do: ['trace_plan', 'length_profile', 'cross_section', 'crossing_detail'],
+  // DO: volledige ontwerpset incl. knelpunten- en boringenstaat
+  do: ['trace_plan', 'length_profile', 'cross_section', 'crossing_detail', 'knelpunten_overzicht'],
   // UO/werktekeningen: volledige set met definitieve maatvoering
-  uo: ['trace_plan', 'length_profile', 'cross_section', 'crossing_detail'],
+  uo: ['trace_plan', 'length_profile', 'cross_section', 'crossing_detail', 'knelpunten_overzicht'],
 };
 
 const FASE_PREFIX: Record<TekeningFase, string> = {
@@ -61,13 +63,17 @@ export function generateDrawings(
   trace: DemoTrace,
   bestaandNet: DemoBestaandNet[],
   titelblok?: TitelblokOpts,
-  fase: TekeningFase = 'do'
+  fase: TekeningFase = 'do',
+  conflicten: DetectedConflict[] = []
 ): DrawingResult[] {
   const alle: DrawingResult[] = [
-    { type: 'trace_plan', label: 'Situatietekening', svg: generateTracePlan(trace, bestaandNet), formaat: 'svg' },
+    { type: 'trace_plan', label: 'Situatietekening', svg: generateTracePlan(trace, bestaandNet, conflicten), formaat: 'svg' },
     { type: 'length_profile', label: 'Lengteprofiel', svg: generateLengthProfile(trace), formaat: 'svg' },
     { type: 'cross_section', label: 'Dwarsprofiel (AVOI)', svg: generateCrossSection(trace), formaat: 'svg' },
     { type: 'crossing_detail', label: 'Kruisingsdetail', svg: generateCrossingDetail(trace), formaat: 'svg' },
+    ...(FASE_SET[fase].includes('knelpunten_overzicht')
+      ? generateKnelpuntenOverzicht(trace, conflicten)
+      : []),
   ];
 
   const drawings = alle.filter((d) => FASE_SET[fase].includes(d.type));
@@ -105,9 +111,12 @@ export function generateDrawings(
 export function generateAlleFaseTekeningen(
   trace: DemoTrace,
   bestaandNet: DemoBestaandNet[],
-  titelblok?: TitelblokOpts
+  titelblok?: TitelblokOpts,
+  conflicten: DetectedConflict[] = []
 ): DrawingResult[] {
   return (['vo', 'do', 'uo'] as TekeningFase[]).flatMap((fase) =>
-    generateDrawings(trace, bestaandNet, titelblok, fase)
+    generateDrawings(trace, bestaandNet, titelblok, fase, conflicten)
   );
 }
+
+export { generateKnelpuntenOverzicht } from './knelpunten-overzicht';

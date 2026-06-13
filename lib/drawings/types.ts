@@ -9,7 +9,8 @@ export type DrawingType =
   | 'werktekening'
   | 'bore_plan'
   | 'bore_profile'
-  | 'bore_setup';
+  | 'bore_setup'
+  | 'knelpunten_overzicht';
 
 export interface DrawingResult {
   type: DrawingType;

@@ -1,5 +1,12 @@
 import type { DemoTrace } from '@/demo/traces';
 import type { DemoBestaandNet } from '@/demo/klic';
+import type { DetectedConflict } from '@/lib/services/conflict-detection';
+import { bepaalBoringen } from '@/lib/services/trace-routing/boringen';
+import {
+  verzamelKnelpunten,
+  knelpuntenTelling,
+  type Knelpunt,
+} from '@/lib/services/trace-routing/knelpunten';
 import { IMKL_COLORS, utilityThemaColor } from '@/lib/discipline-colors';
 import { traceLengthM } from '@/lib/geo';
 import {
@@ -63,81 +70,122 @@ function segmentLabels(
     .join('\n  ');
 }
 
+const KNELPUNT_ERNST_KLEUR = {
+  blokkerend: '#C0392B',
+  waarschuwing: '#E67E22',
+  info: '#2C7BB6',
+} as const;
+const BORING_KLEUR = '#0E7490';
+
+/** Boringmarker: intrede-/uittredeput + boorlijn + B-label. */
+function boringMarker(
+  boring: ReturnType<typeof bepaalBoringen>[number],
+  tx: (x: number) => number,
+  ty: (y: number) => number
+): string {
+  const ix = tx(boring.intrede[0]);
+  const iy = ty(boring.intrede[1]);
+  const ux = tx(boring.uittrede[0]);
+  const uy = ty(boring.uittrede[1]);
+  const cx = tx(boring.x);
+  const cy = ty(boring.y);
+  const put = (px: number, py: number) =>
+    `<rect x="${(px - 3).toFixed(1)}" y="${(py - 3).toFixed(1)}" width="6" height="6" fill="#ffffff" stroke="${BORING_KLEUR}" stroke-width="1.4"/>`;
+  return `<g><!-- Boring ${boring.id} -->
+  <line x1="${ix.toFixed(1)}" y1="${iy.toFixed(1)}" x2="${ux.toFixed(1)}" y2="${uy.toFixed(1)}" stroke="${BORING_KLEUR}" stroke-width="2.6" stroke-dasharray="5,2.5" stroke-linecap="round"/>
+  ${put(ix, iy)}
+  ${put(ux, uy)}
+  <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7.5" fill="#ffffff" stroke="${BORING_KLEUR}" stroke-width="1.5"/>
+  <text x="${cx.toFixed(1)}" y="${(cy + 2.5).toFixed(1)}" fill="${BORING_KLEUR}" font-size="6.5" font-family="IBM Plex Mono,monospace" text-anchor="middle" font-weight="700">${boring.id}</text>
+</g>`;
+}
+
+/** Marker voor een knelpunt met locatie (overige kruising K of conflict C). */
+function knelpuntMarker(
+  k: Knelpunt,
+  tx: (x: number) => number,
+  ty: (y: number) => number
+): string {
+  if (k.x === undefined || k.y === undefined) return '';
+  const cx = tx(k.x);
+  const cy = ty(k.y);
+  if (k.categorie === 'conflict') {
+    const kleur = KNELPUNT_ERNST_KLEUR[k.ernst];
+    return `<g><!-- Conflict ${k.id} -->
+  <polygon points="${cx},${(cy - 8).toFixed(1)} ${(cx + 7).toFixed(1)},${(cy + 5).toFixed(1)} ${(cx - 7).toFixed(1)},${(cy + 5).toFixed(1)}" fill="#ffffff" stroke="${kleur}" stroke-width="1.6"/>
+  <text x="${cx}" y="${(cy + 3.5).toFixed(1)}" fill="${kleur}" font-size="5.5" font-family="IBM Plex Mono,monospace" text-anchor="middle" font-weight="700">${k.id}</text>
+</g>`;
+  }
+  // Overige kruising (open ontgraving / asfaltzagen / bestrating)
+  return `<g><!-- Kruising ${k.id} -->
+  <polygon points="${cx},${(cy - 7).toFixed(1)} ${(cx + 7).toFixed(1)},${cy} ${cx},${(cy + 7).toFixed(1)} ${(cx - 7).toFixed(1)},${cy}" fill="#ffffff" stroke="${TEKENING_KLEUREN.accent}" stroke-width="1.5"/>
+  <text x="${cx}" y="${(cy + 2.5).toFixed(1)}" fill="${TEKENING_KLEUREN.accent}" font-size="6.5" font-family="IBM Plex Mono,monospace" text-anchor="middle" font-weight="700">${k.id}</text>
+</g>`;
+}
+
 /**
- * Genummerde kruisingsmarkers (K1..Kn) op de kruisingslocaties plus een
- * opmerkingenblok met de gekozen uitvoeringsmethode en afweging per kruising.
+ * Markers (B/K/C) op locatie plus een compact knelpuntenblok. De volledige
+ * opmerkingen per knelpunt staan op de aparte knelpunten- en boringenstaat.
  */
-function kruisingAnnotaties(
+function knelpuntLaag(
   trace: DemoTrace,
+  conflicten: DetectedConflict[],
   tx: (x: number) => number,
   ty: (y: number) => number,
   blok: { x: number; y: number; maxW: number }
 ): { markers: string; opmerkingen: string; aantal: number } {
-  const kruisingen = trace.segmenten.flatMap((s) => s.kruisingen ?? []);
-  const afwijkingen = [...new Set(trace.segmenten.flatMap((s) => s.afwijkingen ?? []))];
-  const metLocatie = kruisingen.filter((k) => k.x !== undefined && k.y !== undefined);
-  if (kruisingen.length === 0 && afwijkingen.length === 0) {
-    return { markers: '', opmerkingen: '', aantal: 0 };
-  }
+  const boringen = bepaalBoringen(trace);
+  const knelpunten = verzamelKnelpunten(trace, conflicten);
+  const telling = knelpuntenTelling(knelpunten);
+  const totaal = knelpunten.length;
+  if (totaal === 0) return { markers: '', opmerkingen: '', aantal: 0 };
 
-  const markers = metLocatie
-    .map((k, i) => {
-      const cx = tx(k.x!);
-      const cy = ty(k.y!);
-      return `<g><!-- Kruising K${i + 1} -->
-  <polygon points="${cx},${cy - 7} ${cx + 7},${cy} ${cx},${cy + 7} ${cx - 7},${cy}" fill="#ffffff" stroke="${TEKENING_KLEUREN.accent}" stroke-width="1.5"/>
-  <text x="${cx}" y="${cy + 2.5}" fill="${TEKENING_KLEUREN.accent}" font-size="6.5" font-family="IBM Plex Mono,monospace" text-anchor="middle" font-weight="700">K${i + 1}</text>
-</g>`;
-    })
+  const boringMarkers = boringen.map((b) => boringMarker(b, tx, ty)).join('\n  ');
+  const overigeMarkers = knelpunten
+    .filter((k) => k.categorie !== 'boring' && k.x !== undefined && k.y !== undefined)
+    .map((k) => knelpuntMarker(k, tx, ty))
     .join('\n  ');
+  const markers = `${boringMarkers}\n  ${overigeMarkers}`;
 
+  // Compact blok: kop + telling + tot 6 prioritaire regels (blokkerend eerst),
+  // met verwijzing naar de volledige staat
   const regelHoogte = 8;
-  const items = kruisingen.slice(0, 8);
-  const afwijkingItems = afwijkingen.slice(0, 4);
-  const kruisingBlokH = items.length * (regelHoogte * 2 + 3);
-  const afwijkingBlokH =
-    afwijkingItems.length > 0 ? 12 + afwijkingItems.length * (regelHoogte + 2) : 0;
-  const blokHoogte = 14 + kruisingBlokH + afwijkingBlokH + 6;
+  const prioriteit = [...knelpunten].sort((a, b) => {
+    const r = { blokkerend: 0, waarschuwing: 1, info: 2 } as const;
+    return r[a.ernst] - r[b.ernst];
+  });
+  const items = prioriteit.slice(0, 6);
+  const blokHoogte = 30 + items.length * regelHoogte + 8;
 
   const regels = items
     .map((k, i) => {
-      const y0 = blok.y + 18 + i * (regelHoogte * 2 + 3);
-      const titel = `K${i + 1} · ${k.naam.slice(0, 38)} — ${k.methodeLabel ?? k.legtechniek.replace(/_/g, ' ')}`;
-      const detail = [k.afweging?.[0], k.vergunning].filter(Boolean).join(' · ');
-      return `<text x="${blok.x + 6}" y="${y0}" fill="${TEKENING_KLEUREN.tekstDonker}" font-size="6" font-family="IBM Plex Mono,monospace" font-weight="600">${titel}</text>
-  <text x="${blok.x + 6}" y="${y0 + regelHoogte}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">${detail.slice(0, 92)}</text>`;
+      const y0 = blok.y + 30 + i * regelHoogte;
+      const detail = k.regels[0] ?? '';
+      return `<text x="${blok.x + 6}" y="${y0}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace"><tspan fill="${TEKENING_KLEUREN.tekstDonker}" font-weight="700">${k.id}</tspan> ${k.titel.slice(0, 40)} — ${detail.slice(0, 50)}</text>`;
     })
     .join('\n  ');
 
-  const afwijkingY = blok.y + 18 + kruisingBlokH + 4;
-  const afwijkingRegels =
-    afwijkingItems.length > 0
-      ? `<text x="${blok.x + 6}" y="${afwijkingY}" fill="${TEKENING_KLEUREN.accent}" font-size="6" font-family="IBM Plex Mono,monospace" font-weight="700">AFWIJKINGEN VAN RICHTLIJNEN (met motivatie)</text>
-  ${afwijkingItems
-    .map(
-      (a, i) =>
-        `<text x="${blok.x + 6}" y="${afwijkingY + 9 + i * (regelHoogte + 2)}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">A${i + 1} · ${a.slice(0, 100)}</text>`
-    )
-    .join('\n  ')}`
-      : '';
+  const meer =
+    totaal > items.length
+      ? `<text x="${blok.x + 6}" y="${blok.y + blokHoogte - 4}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">… + ${totaal - items.length} overige — zie knelpunten- en boringenstaat</text>`
+      : `<text x="${blok.x + 6}" y="${blok.y + blokHoogte - 4}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">Volledige opmerkingen: zie knelpunten- en boringenstaat</text>`;
 
-  const meerRegel =
-    kruisingen.length > items.length
-      ? `<text x="${blok.x + 6}" y="${blok.y + blokHoogte - 4}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.2" font-family="IBM Plex Mono,monospace">… + ${kruisingen.length - items.length} overige kruisingen (zie segmentanalyse)</text>`
-      : '';
-
-  const opmerkingen = `<g><!-- Opmerkingen kruisingen en afwijkingen -->
+  const opmerkingen = `<g><!-- Knelpunten en boringen (compact) -->
   <rect x="${blok.x}" y="${blok.y}" width="${blok.maxW}" height="${blokHoogte}" fill="#ffffff" fill-opacity="0.94" stroke="${TEKENING_KLEUREN.lijnLicht}" stroke-width="0.75" rx="3"/>
-  <text x="${blok.x + 6}" y="${blok.y + 10}" fill="${TEKENING_KLEUREN.tekstDonker}" font-size="6.5" font-family="IBM Plex Mono,monospace" font-weight="700">OPMERKINGEN KRUISINGEN (uitvoeringsmethode + afweging)</text>
+  <text x="${blok.x + 6}" y="${blok.y + 11}" fill="${TEKENING_KLEUREN.tekstDonker}" font-size="6.5" font-family="IBM Plex Mono,monospace" font-weight="700">KNELPUNTEN &amp; BORINGEN</text>
+  <text x="${blok.x + 6}" y="${blok.y + 21}" fill="${TEKENING_KLEUREN.mutedDonker}" font-size="5.4" font-family="IBM Plex Mono,monospace">${telling.boringen} boring(en) · ${telling.blokkerend} blokkerend · ${telling.waarschuwing} waarschuwing · ${totaal} totaal</text>
   ${regels}
-  ${afwijkingRegels}
-  ${meerRegel}
+  ${meer}
 </g>`;
 
-  return { markers, opmerkingen, aantal: kruisingen.length };
+  return { markers, opmerkingen, aantal: totaal };
 }
 
-export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet[]): string {
+export function generateTracePlan(
+  trace: DemoTrace,
+  bestaandNet: DemoBestaandNet[],
+  conflicten: DetectedConflict[] = []
+): string {
   const w = 900;
   const h = 620;
   const theme = DEFAULT_TEKENING_THEME;
@@ -161,17 +209,21 @@ export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet
     norm: 'NEN 7171 / IMKL 2.0 / KLIC-WIN',
     legenda: [
       { label: 'Ontwerptracé', color: trace.kleur, strokeWidth: 3 },
+      { label: 'Boring (B) intrede/uittrede', color: BORING_KLEUR, dash: '5,2.5', strokeWidth: 2.5 },
       { label: 'Bestaand net (KLIC)', color: IMKL_COLORS.laagspanning, dash: '6,4' },
       { label: 'Hulpraster RD', color: '#b0b0b0', dash: '2,4', strokeWidth: 0.5 },
     ],
     extra: [
       ['Achtergrond', 'BGT PDOK (exacte pandcontouren)'],
       ['Legtechniek', trace.segmenten.map((s) => s.legtechniek.replace(/_/g, ' ')).join(', ')],
+      ...(bepaalBoringen(trace).length > 0
+        ? ([['Boringen', `${bepaalBoringen(trace).length} stuks — B-markeringen + boringenstaat`]] as [string, string][])
+        : []),
       ...(trace.segmenten.some((s) => s.kruisingen?.length)
         ? ([
             [
               'Kruisingen',
-              `${trace.segmenten.reduce((n, s) => n + (s.kruisingen?.length ?? 0), 0)} stuks — zie K-markeringen`,
+              `${trace.segmenten.reduce((n, s) => n + (s.kruisingen?.length ?? 0), 0)} stuks — zie knelpuntenstaat`,
             ],
           ] as [string, string][])
         : []),
@@ -243,10 +295,10 @@ export function generateTracePlan(trace: DemoTrace, bestaandNet: DemoBestaandNet
         )
       : '';
 
-  const kruisingen = kruisingAnnotaties(trace, tx, ty, {
+  const kruisingen = knelpuntLaag(trace, conflicten, tx, ty, {
     x: pad.l + 12,
     y: pad.t + 12,
-    maxW: Math.min(330, drawW - 24),
+    maxW: Math.min(340, drawW - 24),
   });
 
   const content = `

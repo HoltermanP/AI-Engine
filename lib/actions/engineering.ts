@@ -40,11 +40,20 @@ export async function runBerekeningenAction(traceId: string, actionId?: string) 
   return resultaten;
 }
 
-export async function generateTekeningenAction(traceId: string, actionId?: string) {
+export async function generateTekeningenAction(
+  traceId: string,
+  actionId?: string,
+  conflicten?: DetectedConflict[]
+) {
   const trace = await getTrace(traceId);
   if (!trace) throw new Error('Tracé niet gevonden');
   const net = await getBestaandNet();
-  const tekeningen = generateDrawings(trace, net);
+  // Conflicten op de knelpunten- en boringenstaat + situatietekening tonen.
+  // Door de caller aangeleverd waar beschikbaar; anders zelf toetsen.
+  const knelconflicten = conflicten ?? (await import('@/lib/actions/trace')
+    .then((m) => m.toetsTraceAction(traceId))
+    .catch(() => [] as DetectedConflict[]));
+  const tekeningen = generateDrawings(trace, net, undefined, 'do', knelconflicten);
   saveTekeningenToDossier(trace.projectId, traceId, tekeningen);
   completeActionsForTraceStep(traceId, 'tekenen', actionId);
   return tekeningen;
@@ -122,7 +131,7 @@ export async function generateVolledigDossierAction(
   conflicten?: DetectedConflict[]
 ) {
   const berekeningen = await runBerekeningenAction(traceId);
-  const tekeningen = await generateTekeningenAction(traceId);
+  const tekeningen = await generateTekeningenAction(traceId, undefined, conflicten);
   const onderzoeken = await generateOnderzoekenAction(traceId, collected, conflicten);
   const aanvragen = await generateAanvragenAction(traceId, collected);
   const checklist = await generateVergunningChecklistAction(traceId, collected, conflicten);
@@ -162,7 +171,7 @@ export async function runAlleOnderzoekenEnProcessenAction(
   const aanvragen = await generateAanvragenAction(traceId, collected);
   const checklist = await generateVergunningChecklistAction(traceId, collected, conflicten);
   const berekeningen = await runBerekeningenAction(traceId);
-  const tekeningen = await generateTekeningenAction(traceId);
+  const tekeningen = await generateTekeningenAction(traceId, undefined, conflicten);
   const ai = conflicten?.length
     ? await aiAnalyseAction(traceId, conflicten)
     : null;

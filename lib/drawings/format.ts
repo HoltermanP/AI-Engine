@@ -69,6 +69,7 @@ export const TEKENING_STRUCTUUR_EISEN = {
     bore_plan: ['Startput', 'Eindput', 'Boogtraject', 'Ontwerptracé', 'Legenda', 'Maatvoering', 'Noordpijl', 'Schaal'],
     bore_profile: ['Maaiveld', 'Boogtraject', 'Ontwerpdiepte', 'Grondwater', 'Legenda', 'Ketting (m)', 'm NAP', 'Vert.'],
     bore_setup: ['Boorstelling', 'Startput', 'Pijpenbaan', 'Veiligheidszone', 'Mudrecycling', 'Legenda', 'Maatvoering', 'Noordpijl'],
+    knelpunten_overzicht: ['Knelpunten', 'Boringen', 'Legenda', 'Ernst'],
   },
 } as const;
 
@@ -94,6 +95,7 @@ const TYPE_PREFIX: Record<DrawingType, string> = {
   bore_plan: 'TK-BPL',
   bore_profile: 'TK-BPR',
   bore_setup: 'TK-BOP',
+  knelpunten_overzicht: 'TK-KNP',
 };
 
 export interface TekeningLegendaItem {
@@ -703,7 +705,7 @@ export function valideerTekening(svg: string, type: DrawingType): { geldig: bool
     }
   }
 
-  if (!/TK-(PLN|LNP|DWP|KRS|STN|BPL|BPR|BOP)-/.test(svg)) {
+  if (!/TK-(PLN|LNP|DWP|KRS|STN|BPL|BPR|BOP|KNP)-/.test(svg)) {
     fouten.push('Ontbrekend tekeningnummer (TK-xxx patroon)');
   }
 

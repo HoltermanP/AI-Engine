@@ -14,6 +14,7 @@ export interface MapLibreMap {
   addLayer: (layer: Record<string, unknown>) => void;
   getSource: (id: string) => unknown;
   getLayer: (id: string) => unknown;
+  isStyleLoaded: () => boolean | undefined;
   removeLayer: (id: string) => void;
   removeSource: (id: string) => void;
   getCanvas: () => HTMLCanvasElement;

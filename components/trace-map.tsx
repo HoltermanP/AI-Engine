@@ -468,6 +468,20 @@ function updateTraceSourcesOnMap(
 
 type GeoJsonSource = { setData: (data: GeoJSON.FeatureCollection) => void };
 
+/**
+ * Veilige check of de kaartstijl beschikbaar is. Na map.remove() of tijdens
+ * een stijl-reload is de interne `style` undefined; getSource/addLayer
+ * gooien dan "Cannot read properties of undefined (reading 'getSource')".
+ * isStyleLoaded() controleert `this.style` eerst en gooit niet.
+ */
+function styleKlaar(map: MapLibreMap | null): map is MapLibreMap {
+  try {
+    return !!map && typeof map.isStyleLoaded === 'function' && map.isStyleLoaded() === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Tracé- en tekenlagen apart bijwerken — voorkomt volledige GIS-rebuild bij elke klik. */
 function ensureTraceLayers(
   map: MapLibreMap,
@@ -1125,7 +1139,7 @@ export function TraceMap({
   useEffect(() => {
     const map = mapRef.current;
     const maplibreModule = maplibreRef.current;
-    if (!map || !mapReady || !maplibreModule) return;
+    if (!styleKlaar(map) || !maplibreModule) return;
 
     const puntData: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
@@ -1209,6 +1223,7 @@ export function TraceMap({
     if (!map || !mapReady) return;
 
     const zorgVoorBronnen = () => {
+      if (!styleKlaar(map)) return;
       if (!map.getSource('cad-preview')) {
         map.addSource('cad-preview', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addLayer({
@@ -1249,10 +1264,12 @@ export function TraceMap({
     };
 
     const zetPreview = (features: GeoJSON.Feature[]) => {
+      if (!styleKlaar(map)) return;
       (map.getSource('cad-preview') as { setData: (d: GeoJSON.FeatureCollection) => void } | undefined)
         ?.setData({ type: 'FeatureCollection', features });
     };
     const zetSnap = (features: GeoJSON.Feature[]) => {
+      if (!styleKlaar(map)) return;
       (map.getSource('cad-snap') as { setData: (d: GeoJSON.FeatureCollection) => void } | undefined)
         ?.setData({ type: 'FeatureCollection', features });
     };
@@ -1380,8 +1397,11 @@ export function TraceMap({
       window.removeEventListener('keydown', onKeyDown);
       cadCursorRef.current = null;
       maatBufferRef.current = '';
-      if (map.getSource('cad-preview')) zetPreview([]);
-      if (map.getSource('cad-snap')) zetSnap([]);
+      // Tijdens unmount kan de kaart al verwijderd zijn (style undefined)
+      if (styleKlaar(map)) {
+        if (map.getSource('cad-preview')) zetPreview([]);
+        if (map.getSource('cad-snap')) zetSnap([]);
+      }
       onTekenStatusRef.current?.(null);
     };
   }, [mapReady, drawMode, onMapClick]);
@@ -1389,7 +1409,7 @@ export function TraceMap({
   // Meetfunctie: meetlijn + totaallengte
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    if (!styleKlaar(map)) return;
     const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
     if (meetPunten.length >= 1) {
       const coords = meetPunten.map((p) => rdToWgs84(p.x, p.y));

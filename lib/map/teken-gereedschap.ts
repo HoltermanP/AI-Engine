@@ -12,6 +12,8 @@ import type { TraceCoord, TraceLine, TraceLines } from '@/lib/trace-edit';
 
 export interface SnapDoel {
   lines: TraceLines;
+  /** Bronlabel, bijv. "Eindpunt EL-LS-001" of "Bestaand 10kV (Liander)". */
+  label?: string;
 }
 
 export type SnapType = 'vertex' | 'eindpunt' | 'lijn';
@@ -21,11 +23,14 @@ export interface SnapResultaat {
   y: number;
   type: SnapType;
   afstandM: number;
+  /** Welk object er gesnapt is (uit SnapDoel.label). */
+  bron?: string;
 }
 
 /**
  * OSNAP: zoek het beste snap-punt nabij de cursor. Hoek-/eindpunten gaan
- * vóór lijn-snaps (zoals in CAD), elk met hun eigen tolerantie.
+ * vóór lijn-snaps (zoals in CAD), elk met hun eigen tolerantie. Het bronlabel
+ * van het geraakte doel komt mee terug zodat de gebruiker ziet waaraan snapt.
  */
 export function snapPunt(
   x: number,
@@ -50,6 +55,7 @@ export function snapPunt(
             y: vy,
             type: i === 0 || i === line.length - 1 ? 'eindpunt' : 'vertex',
             afstandM: d,
+            bron: doel.label,
           };
         }
       }
@@ -65,7 +71,7 @@ export function snapPunt(
         const py = ay + t * dy;
         const d = Math.hypot(x - px, y - py);
         if (d <= lijnTol && (!besteLijn || d < besteLijn.afstandM)) {
-          besteLijn = { x: px, y: py, type: 'lijn', afstandM: d };
+          besteLijn = { x: px, y: py, type: 'lijn', afstandM: d, bron: doel.label };
         }
       }
     }
@@ -120,6 +126,81 @@ export function segmentMaat(
   let hoek = (Math.atan2(dx, dy) * 180) / Math.PI;
   if (hoek < 0) hoek += 360;
   return { lengteM: Math.hypot(dx, dy), hoekDeg: hoek };
+}
+
+/**
+ * Binnenhoek (knik) bij `hoek` tussen segment `voor`→`hoek` en `hoek`→`naar`.
+ * 180° = recht doorlopend, 90° = haakse knik, →0° = scherpe terugbuiging.
+ */
+export function binnenhoekDeg(
+  voor: { x: number; y: number },
+  hoek: { x: number; y: number },
+  naar: { x: number; y: number },
+): number {
+  const ax = voor.x - hoek.x;
+  const ay = voor.y - hoek.y;
+  const bx = naar.x - hoek.x;
+  const by = naar.y - hoek.y;
+  const la = Math.hypot(ax, ay);
+  const lb = Math.hypot(bx, by);
+  if (la < 0.001 || lb < 0.001) return 180;
+  const cos = Math.max(-1, Math.min(1, (ax * bx + ay * by) / (la * lb)));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
+export interface HoekHulplijn {
+  x: number;
+  y: number;
+  /** Type hulplijn t.o.v. het vorige segment of een referentierichting. */
+  soort: 'haaks' | 'parallel' | 'verlengde';
+}
+
+/**
+ * Magnetische hoeksnap: trekt de cursor naar een haakse (90°), parallelle (0°)
+ * of recht-doorlopende richting t.o.v. het vorige segment, mits binnen de
+ * tolerantie. Geeft het gecorrigeerde punt + welk type hulplijn actief is,
+ * zodat de kaart een stippel-guide kan tekenen. Retourneert null buiten
+ * tolerantie (dan geldt de vrije/OSNAP-positie).
+ */
+export function hoekHulplijn(
+  vorigVan: { x: number; y: number },
+  vorigNaar: { x: number; y: number },
+  cursor: { x: number; y: number },
+  tolGraden = 4,
+): HoekHulplijn | null {
+  const segDx = vorigNaar.x - vorigVan.x;
+  const segDy = vorigNaar.y - vorigVan.y;
+  const segLen = Math.hypot(segDx, segDy);
+  const curDx = cursor.x - vorigNaar.x;
+  const curDy = cursor.y - vorigNaar.y;
+  const curLen = Math.hypot(curDx, curDy);
+  if (segLen < 0.01 || curLen < 0.01) return null;
+
+  const segHoek = Math.atan2(segDy, segDx);
+  const curHoek = Math.atan2(curDy, curDx);
+  let delta = ((curHoek - segHoek) * 180) / Math.PI;
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  const abs = Math.abs(delta);
+
+  const richtingen: { hoek: number; soort: HoekHulplijn['soort'] }[] = [
+    { hoek: 0, soort: 'verlengde' },
+    { hoek: 90, soort: 'haaks' },
+    { hoek: -90, soort: 'haaks' },
+    { hoek: 180, soort: 'parallel' },
+    { hoek: -180, soort: 'parallel' },
+  ];
+  for (const r of richtingen) {
+    if (Math.abs(Math.abs(delta) - Math.abs(r.hoek)) <= tolGraden && (r.hoek !== 0 || abs <= tolGraden)) {
+      const doelHoek = segHoek + (r.hoek * Math.PI) / 180;
+      return {
+        x: vorigNaar.x + curLen * Math.cos(doelHoek),
+        y: vorigNaar.y + curLen * Math.sin(doelHoek),
+        soort: r.soort,
+      };
+    }
+  }
+  return null;
 }
 
 /**

@@ -9,6 +9,7 @@
  */
 
 import type { TraceCoord, TraceLine, TraceLines } from '@/lib/trace-edit';
+import { segmentsIntersect } from '@/lib/geo';
 
 export interface SnapDoel {
   lines: TraceLines;
@@ -254,4 +255,159 @@ export function meetLengteM(punten: { x: number; y: number }[]): number {
     lengte += Math.hypot(punten[i].x - punten[i - 1].x, punten[i].y - punten[i - 1].y);
   }
   return lengte;
+}
+
+// ───────────────────────── TRIM / EXTEND (CAD-bewerken) ─────────────────────
+
+/** Cumulatieve ketting (m) per vertex van een polylijn. */
+function chainages(line: TraceLine): number[] {
+  const ch = [0];
+  for (let i = 1; i < line.length; i++) {
+    ch.push(ch[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
+  }
+  return ch;
+}
+
+/** Projectie van (x,y) op de polylijn → ketting (m) van het dichtstbijzijnde punt. */
+function projecteerKetting(line: TraceLine, x: number, y: number): number {
+  const ch = chainages(line);
+  let beste = { d: Infinity, ketting: 0 };
+  for (let i = 1; i < line.length; i++) {
+    const ax = line[i - 1][0];
+    const ay = line[i - 1][1];
+    const dx = line[i][0] - ax;
+    const dy = line[i][1] - ay;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / lenSq));
+    const px = ax + t * dx;
+    const py = ay + t * dy;
+    const d = Math.hypot(x - px, y - py);
+    if (d < beste.d) beste = { d, ketting: ch[i - 1] + t * Math.sqrt(lenSq) };
+  }
+  return beste.ketting;
+}
+
+/** Punt op de polylijn bij gegeven ketting (m). */
+function puntBijKetting(line: TraceLine, doel: number): TraceCoord {
+  const ch = chainages(line);
+  if (doel <= 0) return [...line[0]] as TraceCoord;
+  const totaal = ch[ch.length - 1];
+  if (doel >= totaal) return [...line[line.length - 1]] as TraceCoord;
+  for (let i = 1; i < line.length; i++) {
+    if (ch[i] >= doel) {
+      const t = (doel - ch[i - 1]) / (ch[i] - ch[i - 1] || 1);
+      const z = line[i - 1][2] ?? line[i][2] ?? -0.65;
+      return [
+        line[i - 1][0] + t * (line[i][0] - line[i - 1][0]),
+        line[i - 1][1] + t * (line[i][1] - line[i - 1][1]),
+        z,
+      ];
+    }
+  }
+  return [...line[line.length - 1]] as TraceCoord;
+}
+
+/** Deel van de polylijn tussen twee kettingwaarden, met exacte eindpunten. */
+function snijPolylijn(line: TraceLine, van: number, tot: number): TraceLine {
+  if (tot <= van) return [];
+  const ch = chainages(line);
+  const uit: TraceLine = [puntBijKetting(line, van)];
+  for (let i = 0; i < line.length; i++) {
+    if (ch[i] > van + 0.001 && ch[i] < tot - 0.001) uit.push([...line[i]] as TraceCoord);
+  }
+  uit.push(puntBijKetting(line, tot));
+  return uit;
+}
+
+/** Alle snijpunten van een polylijn met een set snijlijnen, als kettingwaarden. */
+function snijKettingen(line: TraceLine, snijlijnen: TraceLine[]): number[] {
+  const ch = chainages(line);
+  const resultaat: number[] = [];
+  for (let i = 1; i < line.length; i++) {
+    const a1: [number, number] = [line[i - 1][0], line[i - 1][1]];
+    const a2: [number, number] = [line[i][0], line[i][1]];
+    const segLen = Math.hypot(a2[0] - a1[0], a2[1] - a1[1]);
+    for (const snij of snijlijnen) {
+      for (let j = 1; j < snij.length; j++) {
+        const pt = segmentsIntersect(a1, a2, [snij[j - 1][0], snij[j - 1][1]], [snij[j][0], snij[j][1]]);
+        if (!pt) continue;
+        const t = segLen === 0 ? 0 : Math.hypot(pt[0] - a1[0], pt[1] - a1[1]) / segLen;
+        resultaat.push(ch[i - 1] + t * segLen);
+      }
+    }
+  }
+  return [...new Set(resultaat.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
+}
+
+/**
+ * TRIM: snijd het aangewezen deel van `line` weg tot de dichtstbijzijnde
+ * snijlijn(en). De klik bepaalt welk deel verdwijnt. Retourneert de
+ * overblijvende polylijn(en) (1 stuk bij randstuk, 2 bij middenstuk),
+ * of null als geen snijlijn `line` kruist.
+ */
+export function trimPolyline(
+  line: TraceLine,
+  snijlijnen: TraceLine[],
+  klikX: number,
+  klikY: number,
+): TraceLine[] | null {
+  if (line.length < 2) return null;
+  const snij = snijKettingen(line, snijlijnen);
+  if (snij.length === 0) return null;
+
+  const totaal = chainages(line).slice(-1)[0];
+  const klik = projecteerKetting(line, klikX, klikY);
+  const onder = [...snij].reverse().find((c) => c < klik - 0.01) ?? null;
+  const boven = snij.find((c) => c > klik + 0.01) ?? null;
+
+  if (onder !== null && boven !== null) {
+    // Middenstuk weg → twee resterende delen
+    return [snijPolylijn(line, 0, onder), snijPolylijn(line, boven, totaal)].filter((l) => l.length >= 2);
+  }
+  if (onder !== null) return [snijPolylijn(line, 0, onder)].filter((l) => l.length >= 2);
+  if (boven !== null) return [snijPolylijn(line, boven, totaal)].filter((l) => l.length >= 2);
+  return null;
+}
+
+/**
+ * EXTEND: verleng het uiteinde van `line` dat het dichtst bij de klik ligt in
+ * de richting van het laatste segment tot het de eerste grenslijn raakt.
+ * Retourneert de verlengde polylijn, of null als er niets te verlengen valt.
+ */
+export function extendPolyline(
+  line: TraceLine,
+  grenslijnen: TraceLine[],
+  klikX: number,
+  klikY: number,
+): TraceLine | null {
+  if (line.length < 2) return null;
+  const startD = Math.hypot(line[0][0] - klikX, line[0][1] - klikY);
+  const eindD = Math.hypot(line[line.length - 1][0] - klikX, line[line.length - 1][1] - klikY);
+  const bijEind = eindD <= startD;
+
+  const p = bijEind ? line[line.length - 1] : line[0];
+  const q = bijEind ? line[line.length - 2] : line[1];
+  const dx = p[0] - q[0];
+  const dy = p[1] - q[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 0.001) return null;
+  const ux = dx / len;
+  const uy = dy / len;
+  const ver: [number, number] = [p[0] + ux * 1_000_000, p[1] + uy * 1_000_000];
+  const vanaf: [number, number] = [p[0], p[1]];
+
+  let beste: { x: number; y: number; d: number } | null = null;
+  for (const grens of grenslijnen) {
+    for (let j = 1; j < grens.length; j++) {
+      const pt = segmentsIntersect(vanaf, ver, [grens[j - 1][0], grens[j - 1][1]], [grens[j][0], grens[j][1]]);
+      if (!pt) continue;
+      const d = Math.hypot(pt[0] - p[0], pt[1] - p[1]);
+      if (d > 0.01 && (!beste || d < beste.d)) beste = { x: pt[0], y: pt[1], d };
+    }
+  }
+  if (!beste) return null;
+
+  const z = p[2] ?? -0.65;
+  const nieuwPunt: TraceCoord = [beste.x, beste.y, z];
+  return bijEind ? [...line.map((c) => [...c] as TraceCoord), nieuwPunt] : [nieuwPunt, ...line.map((c) => [...c] as TraceCoord)];
 }

@@ -7,6 +7,7 @@ import {
   knelpuntenTelling,
   type Knelpunt,
 } from '@/lib/services/trace-routing/knelpunten';
+import { bematingenSvg } from './bemating-render';
 import { IMKL_COLORS, utilityThemaColor } from '@/lib/discipline-colors';
 import { traceLengthM } from '@/lib/geo';
 import {
@@ -309,6 +310,7 @@ export function generateTracePlan(
   ${tracePaths}
   ${segmentLabels(trace, traceLines, tx, ty)}
   ${kruisingen.markers}
+  ${bematingenSvg(trace.bematingen, tx, ty)}
   ${kruisingen.opmerkingen}
   ${start ? `<circle cx="${tx(start[0])}" cy="${ty(start[1])}" r="6" fill="${trace.kleur}" stroke="#ffffff" stroke-width="2"/>
   <polygon points="${tx(start[0])},${ty(start[1]) - 10} ${tx(start[0]) - 5},${ty(start[1]) - 3} ${tx(start[0]) + 5},${ty(start[1]) - 3}" fill="${trace.kleur}"/>

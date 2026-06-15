@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TraceMap, type MapLayerData, type MapNet, type MapTrace } from '@/components/trace-map-dynamic';
 import type { CadOpties, TekenStatus } from '@/components/trace-map';
-import { offsetPolyline } from '@/lib/map/teken-gereedschap';
+import { offsetPolyline, trimPolyline, extendPolyline } from '@/lib/map/teken-gereedschap';
+import type { Bemating } from '@/lib/map/bemating';
 import { MapLayerPanel } from '@/components/map-layer-panel';
 import { MapDisplayControls, type DrawMode } from '@/components/map-display-controls';
 import type { ConnectorMode } from '@/lib/connectors/types';
@@ -15,10 +16,14 @@ import { LAYER_DATA_FIELD } from '@/lib/map/fetchable-layers';
 import {
   appendVertex,
   applyTraceLines,
+  breakLine,
   findNearestSegmentInsert,
   findNearestVertex,
   getTraceLines,
   insertVertexAfter,
+  joinLines,
+  reverseLine,
+  type TraceLine,
   type TraceLines,
 } from '@/lib/trace-edit';
 
@@ -92,6 +97,45 @@ function updateSelectedTraceLines(
   return traces.map((t) =>
     t.id === selectedTraceId ? applyTraceLines(t, lines) : t
   );
+}
+
+function updateSelectedTraceBematingen(
+  traces: MapTrace[],
+  selectedTraceId: string,
+  updater: (b: Bemating[]) => Bemating[]
+): MapTrace[] {
+  return traces.map((t) =>
+    t.id === selectedTraceId ? { ...t, bematingen: updater(t.bematingen ?? []) } : t
+  );
+}
+
+/** Alle lijnen op de kaart als snij-/grenslijnen (andere tracés + bestaand net). */
+function verzamelLijnen(
+  traces: MapTrace[],
+  bestaandNet: MapNet[],
+  excludeTraceId: string,
+  excludeLineIdx: number
+): TraceLine[] {
+  const uit: TraceLine[] = [];
+  for (const t of traces) {
+    const lijnen = getTraceLines(t);
+    lijnen.forEach((l, i) => {
+      if (t.id === excludeTraceId && i === excludeLineIdx) return;
+      if (l.length >= 2) uit.push(l.map(([x, y, z]) => [x, y, z ?? -0.65] as [number, number, number]));
+    });
+  }
+  for (const net of bestaandNet) {
+    if (net.coordinates.length >= 2) {
+      uit.push(net.coordinates.map(([x, y, z]) => [x, y, z ?? -0.65] as [number, number, number]));
+    }
+  }
+  return uit;
+}
+
+/** Index van de lijn die het dichtst bij (x,y) ligt; -1 als er geen lijn is. */
+function naasteLijnIdx(lines: TraceLines, x: number, y: number): number {
+  const seg = findNearestSegmentInsert(lines, x, y, Number.MAX_SAFE_INTEGER);
+  return seg?.lineIdx ?? -1;
 }
 
 export function MapWorkspace({
@@ -175,6 +219,9 @@ export function MapWorkspace({
   const [cadOpties, setCadOpties] = useState<CadOpties>({ osnap: true, ortho: false });
   const [meetPunten, setMeetPunten] = useState<{ x: number; y: number }[]>([]);
   const [tekenStatus, setTekenStatus] = useState<TekenStatus | null>(null);
+  /** Lopende bematingsplaatsing: verzamelde punten + oplopend nummer voor de id. */
+  const [bematingPunten, setBematingPunten] = useState<[number, number][]>([]);
+  const bematingNrRef = useRef(0);
 
   /** Undo-/redo-stapels (Ctrl+Z / Ctrl+Shift+Z): snapshots van het geselecteerde tracé. */
   const undoStackRef = useRef<TraceLines[]>([]);
@@ -284,12 +331,13 @@ export function MapWorkspace({
         setCadOpties((o) => ({ ...o, ortho: !o.ortho }));
       } else if (e.key === 'Escape') {
         if (drawMode === 'meten' || meetPunten.length) setMeetPunten([]);
+        if (bematingPunten.length) setBematingPunten([]);
         if (drawMode !== 'none') setDrawMode('none');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editable, selectedTraceId, drawMode, meetPunten.length, setTraces]);
+  }, [editable, selectedTraceId, drawMode, meetPunten.length, bematingPunten.length, setTraces]);
 
   const handleTraceEdit = useCallback(
     (lng: number, lat: number, modifiers?: { alt: boolean }) => {
@@ -312,13 +360,95 @@ export function MapWorkspace({
 
       if (!selectedTraceId || drawMode === 'none') return;
 
+      // Bemating plaatsen: punten verzamelen (snap op hoekpunten) tot compleet
+      if (drawMode === 'dim-lineair' || drawMode === 'dim-hoek') {
+        const trace = traces.find((t) => t.id === selectedTraceId);
+        const lines = trace ? getTraceLines(trace) : [];
+        const snap = findNearestVertex(lines, x, y, 12);
+        const punt: [number, number] = snap
+          ? [lines[snap.lineIdx][snap.vertexIdx][0], lines[snap.lineIdx][snap.vertexIdx][1]]
+          : [x, y];
+        const nodig = drawMode === 'dim-lineair' ? 2 : 3;
+        const verzameld = [...bematingPunten, punt];
+        if (verzameld.length >= nodig) {
+          const id = `dim-${++bematingNrRef.current}`;
+          const bemating: Bemating =
+            drawMode === 'dim-lineair'
+              ? { id, type: 'lineair', punten: verzameld.slice(0, 2), offsetM: 4 }
+              : { id, type: 'hoek', punten: verzameld.slice(0, 3) };
+          setBematingPunten([]);
+          setTraces((prev) => updateSelectedTraceBematingen(prev, selectedTraceId, (b) => [...b, bemating]));
+        } else {
+          setBematingPunten(verzameld);
+        }
+        return;
+      }
+
       setTraces((prev) => {
         const trace = prev.find((t) => t.id === selectedTraceId);
         if (!trace) return prev;
 
-        pushUndo(prev);
         const lines = getTraceLines(trace);
         const defaultZ = lines.flat().at(-1)?.[2] ?? -0.65;
+
+        // CAD-bewerken: trim / extend / break / join / reverse
+        if (drawMode === 'reverse') {
+          const idx = naasteLijnIdx(lines, x, y);
+          if (idx < 0) return prev;
+          pushUndo(prev);
+          return updateSelectedTraceLines(prev, selectedTraceId, reverseLine(lines, idx));
+        }
+        if (drawMode === 'break') {
+          const idx = naasteLijnIdx(lines, x, y);
+          if (idx < 0) return prev;
+          const gebroken = breakLine(lines, idx, x, y);
+          if (gebroken === lines) return prev;
+          pushUndo(prev);
+          return updateSelectedTraceLines(prev, selectedTraceId, gebroken);
+        }
+        if (drawMode === 'join') {
+          if (lines.length < 2) return prev;
+          // Twee lijnen met het dichtstbijzijnde uiteinde bij de klik
+          const opAfstand = lines
+            .map((l, i) => ({
+              i,
+              d: Math.min(
+                Math.hypot(l[0][0] - x, l[0][1] - y),
+                Math.hypot(l[l.length - 1][0] - x, l[l.length - 1][1] - y)
+              ),
+            }))
+            .sort((a, b) => a.d - b.d);
+          const [a, b] = opAfstand;
+          if (!a || !b) return prev;
+          const samen = joinLines(lines, a.i, b.i, 50);
+          if (samen.length === lines.length) return prev;
+          pushUndo(prev);
+          return updateSelectedTraceLines(prev, selectedTraceId, samen);
+        }
+        if (drawMode === 'trim') {
+          const idx = naasteLijnIdx(lines, x, y);
+          if (idx < 0) return prev;
+          const snijlijnen = verzamelLijnen(prev, bestaandNet, selectedTraceId, idx);
+          const res = trimPolyline(lines[idx], snijlijnen, x, y);
+          if (!res || res.length === 0) return prev;
+          pushUndo(prev);
+          const next = lines.map((l) => l.map((c) => [...c] as [number, number, number]));
+          next.splice(idx, 1, ...res);
+          return updateSelectedTraceLines(prev, selectedTraceId, next);
+        }
+        if (drawMode === 'extend') {
+          const idx = naasteLijnIdx(lines, x, y);
+          if (idx < 0) return prev;
+          const grenslijnen = verzamelLijnen(prev, bestaandNet, selectedTraceId, idx);
+          const res = extendPolyline(lines[idx], grenslijnen, x, y);
+          if (!res) return prev;
+          pushUndo(prev);
+          const next = lines.map((l) => l.map((c) => [...c] as [number, number, number]));
+          next[idx] = res;
+          return updateSelectedTraceLines(prev, selectedTraceId, next);
+        }
+
+        pushUndo(prev);
 
         if (drawMode === 'draw') {
           return updateSelectedTraceLines(
@@ -362,7 +492,16 @@ export function MapWorkspace({
         return prev;
       });
     },
-    [selectedTraceId, drawMode, setTraces, setAutoWaypoints, pushUndo]
+    [
+      selectedTraceId,
+      drawMode,
+      setTraces,
+      setAutoWaypoints,
+      pushUndo,
+      traces,
+      bestaandNet,
+      bematingPunten,
+    ]
   );
 
   /** Parallel kopiëren: offset van de eerste lijn als extra lijn in het tracé. */
@@ -469,6 +608,8 @@ export function MapWorkspace({
           cadOpties={cadOpties}
           onTekenStatus={setTekenStatus}
           meetPunten={meetPunten}
+          bematingen={traces.find((t) => t.id === selectedTraceId)?.bematingen}
+          bematingPunten={bematingPunten}
           netontwerpAssets={netontwerpAssets}
           plaatsModusActief={Boolean(onAssetPlaats)}
           onAssetClick={onAssetClick}

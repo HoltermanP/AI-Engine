@@ -2,11 +2,40 @@
 
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Copy, GitBranch, Magnet, Minus, Pencil, Plus, RotateCcw, Ruler, Trash2, Wand2 } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Copy,
+  GitBranch,
+  Link2,
+  Magnet,
+  Minus,
+  MoveRight,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Ruler,
+  Scissors,
+  Split,
+  Trash2,
+  Triangle,
+  Wand2,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { CadOpties } from '@/components/trace-map';
 
-export type DrawMode = 'none' | 'draw' | 'edit' | 'auto' | 'meten';
+export type DrawMode =
+  | 'none'
+  | 'draw'
+  | 'edit'
+  | 'auto'
+  | 'meten'
+  | 'trim'
+  | 'extend'
+  | 'break'
+  | 'join'
+  | 'reverse'
+  | 'dim-lineair'
+  | 'dim-hoek';
 
 interface MapDisplayControlsProps {
   traceLineWidth: number;
@@ -146,6 +175,54 @@ export function MapDisplayControls({
               </button>
             )}
           </div>
+
+          {/* CAD-bewerken: trim / extend / break / join / reverse */}
+          <p className="pt-1 text-[10px] font-medium text-muted-foreground">CAD-bewerken</p>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                { mode: 'trim', label: 'Trim', icon: Scissors },
+                { mode: 'extend', label: 'Verlengen', icon: MoveRight },
+                { mode: 'break', label: 'Breken', icon: Split },
+                { mode: 'join', label: 'Samenvoegen', icon: Link2 },
+                { mode: 'reverse', label: 'Omkeren', icon: ArrowLeftRight },
+              ] as const
+            ).map(({ mode, label, icon: Icon }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onDrawModeChange(drawMode === mode ? 'none' : mode)}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] ${
+                  drawMode === mode ? 'bg-[#0E7490] text-white' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                <Icon className="h-3 w-3" /> {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Bemating: lineair / hoek */}
+          <p className="pt-1 text-[10px] font-medium text-muted-foreground">Bemating</p>
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => onDrawModeChange(drawMode === 'dim-lineair' ? 'none' : 'dim-lineair')}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] ${
+                drawMode === 'dim-lineair' ? 'bg-[#1f2937] text-white' : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              <Ruler className="h-3 w-3" /> Lengtemaat
+            </button>
+            <button
+              type="button"
+              onClick={() => onDrawModeChange(drawMode === 'dim-hoek' ? 'none' : 'dim-hoek')}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] ${
+                drawMode === 'dim-hoek' ? 'bg-[#1f2937] text-white' : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              <Triangle className="h-3 w-3" /> Hoekmaat
+            </button>
+          </div>
           {drawMode !== 'none' && (
             <p className="text-[10px] text-[#2D6FE8]">
               {drawMode === 'auto'
@@ -169,6 +246,38 @@ export function MapDisplayControls({
           {drawMode === 'meten' && (
             <p className="text-[10px] text-[#9333EA]">
               Klik meetpunten op de kaart; de totaallengte verschijnt bij het laatste punt. Esc wist de meting.
+            </p>
+          )}
+          {drawMode === 'trim' && (
+            <p className="text-[10px] text-[#0E7490]">
+              Klik op het deel van het tracé dat je wegsnijdt — het wordt afgesneden tot de dichtstbijzijnde kruisende lijn (ander tracé of bestaand net).
+            </p>
+          )}
+          {drawMode === 'extend' && (
+            <p className="text-[10px] text-[#0E7490]">
+              Klik bij het uiteinde dat je wilt verlengen — het schuift door tot de eerste lijn die het raakt.
+            </p>
+          )}
+          {drawMode === 'break' && (
+            <p className="text-[10px] text-[#0E7490]">
+              Klik op het tracé om het op dat punt in twee aparte lijnen te splitsen.
+            </p>
+          )}
+          {drawMode === 'join' && (
+            <p className="text-[10px] text-[#0E7490]">
+              Klik bij een aansluitpunt van twee lijnen om ze samen te voegen tot één polylijn.
+            </p>
+          )}
+          {drawMode === 'reverse' && (
+            <p className="text-[10px] text-[#0E7490]">
+              Klik op een lijn om de tekenrichting (start ↔ eind) om te keren.
+            </p>
+          )}
+          {(drawMode === 'dim-lineair' || drawMode === 'dim-hoek') && (
+            <p className="text-[10px] text-[#1f2937]">
+              {drawMode === 'dim-lineair'
+                ? 'Klik twee punten voor een lengtemaat (snapt op hoekpunten). De maatlijn komt op de tekening en in de DXF.'
+                : 'Klik drie punten (been – hoekpunt – been) voor een hoekmaat. Esc annuleert.'}
             </p>
           )}
 

@@ -23,6 +23,7 @@ import type { LayerToggle, BasemapId } from '@/components/map-layer-panel';
 import { BASEMAP_OPTIONS } from '@/components/map-layer-panel';
 import type { DrawMode } from '@/components/map-display-controls';
 import { getTraceLines, type TraceLines } from '@/lib/trace-edit';
+import { bematingGeometrie, type Bemating } from '@/lib/map/bemating';
 import {
   meetLengteM,
   orthoPunt,
@@ -141,6 +142,8 @@ export interface MapTrace {
   kleur: string;
   coordinates: [number, number, number?][];
   traceLines?: [number, number, number?][][];
+  /** Handmatig geplaatste bematingen (lineair + hoek) */
+  bematingen?: Bemating[];
 }
 
 export interface MapNet {
@@ -223,6 +226,10 @@ interface TraceMapProps {
   onTekenStatus?: (status: TekenStatus | null) => void;
   /** Meetfunctie: meetpunten in RD; de kaart tekent de meetlijn + totaal */
   meetPunten?: { x: number; y: number }[];
+  /** Bematingen (lineair + hoek) van het geselecteerde tracé — op de kaart getekend */
+  bematingen?: Bemating[];
+  /** Lopende bematingsplaatsing: reeds geklikte punten (RD) als preview */
+  bematingPunten?: [number, number][];
   /** Netontwerp-assets (stations/moffen als punten, mantelbuizen als lijnen) — render-klaar GeoJSON */
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   /** Plaatsmodus actief: kaartkliks gaan naar onMapClick, cursor wordt crosshair */
@@ -731,6 +738,8 @@ export function TraceMap({
   cadOpties,
   onTekenStatus,
   meetPunten = [],
+  bematingen = [],
+  bematingPunten = [],
   netontwerpAssets,
   plaatsModusActief = false,
   onAssetClick,
@@ -1448,6 +1457,80 @@ export function TraceMap({
       (map.getSource('cad-meet') as { setData: (d: GeoJSON.FeatureCollection) => void }).setData(data);
     }
   }, [meetPunten, mapReady]);
+
+  // Bemating (lineair + hoek) van het geselecteerde tracé + lopende plaatsing
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!styleKlaar(map)) return;
+    const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+    const lijn = (pts: [number, number][]) => pts.map(([x, y]) => rdToWgs84(x, y));
+
+    for (const b of bematingen) {
+      const geo = bematingGeometrie(b);
+      if (geo.type === 'lineair') {
+        for (const seg of [geo.maatlijn, geo.extensie1, geo.extensie2]) {
+          data.features.push({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: lijn([seg[0], seg[1]]) },
+          });
+        }
+        data.features.push({
+          type: 'Feature',
+          properties: { label: geo.label },
+          geometry: { type: 'Point', coordinates: rdToWgs84(geo.tekstPos[0], geo.tekstPos[1]) },
+        });
+      } else {
+        data.features.push({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: lijn(geo.boog) },
+        });
+        data.features.push({
+          type: 'Feature',
+          properties: { label: geo.label },
+          geometry: { type: 'Point', coordinates: rdToWgs84(geo.tekstPos[0], geo.tekstPos[1]) },
+        });
+      }
+    }
+    // Lopende plaatsing: reeds geklikte punten als markers
+    for (const [x, y] of bematingPunten) {
+      data.features.push({
+        type: 'Feature',
+        properties: { punt: true },
+        geometry: { type: 'Point', coordinates: rdToWgs84(x, y) },
+      });
+    }
+
+    if (!map.getSource('cad-bemating')) {
+      if (data.features.length === 0) return;
+      map.addSource('cad-bemating', { type: 'geojson', data });
+      map.addLayer({
+        id: 'cad-bemating-line',
+        type: 'line',
+        source: 'cad-bemating',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        paint: { 'line-color': '#1f2937', 'line-width': 1.2 },
+      });
+      map.addLayer({
+        id: 'cad-bemating-punt',
+        type: 'circle',
+        source: 'cad-bemating',
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'punt'], true]],
+        paint: { 'circle-radius': 4, 'circle-color': '#1f2937', 'circle-stroke-width': 1.5, 'circle-stroke-color': '#ffffff' },
+      });
+      map.addLayer({
+        id: 'cad-bemating-label',
+        type: 'symbol',
+        source: 'cad-bemating',
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'punt']]],
+        layout: { 'text-field': ['get', 'label'], 'text-size': 11, 'text-anchor': 'center' },
+        paint: { 'text-color': '#1f2937', 'text-halo-color': '#ffffff', 'text-halo-width': 1.8 },
+      });
+    } else {
+      (map.getSource('cad-bemating') as { setData: (d: GeoJSON.FeatureCollection) => void }).setData(data);
+    }
+  }, [bematingen, bematingPunten, mapReady]);
 
   // Netontwerp-assets verslepen (stations/moffen) — alleen aansluitingen niet
   const assetDragRef = useRef<{ assetId: string; moved: boolean } | null>(null);

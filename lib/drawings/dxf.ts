@@ -19,6 +19,7 @@ import {
   type LWPolylineVertex,
 } from '@tarikjabiri/dxf';
 import { IMKL_COLORS } from '@/lib/discipline-colors';
+import { bematingGeometrie, type Bemating } from '@/lib/map/bemating';
 import { NLCS_KLEUR } from './nlcs';
 
 /** RD-coördinaat (EPSG:28992) in meters: [x, y]. */
@@ -106,6 +107,8 @@ export interface TraceDxfInput {
   kruisingen?: DxfKruising[];
   /** Wegen als omgevingscontext. */
   wegen?: DxfWegLijn[];
+  /** Bematingen (lineair + hoek) op de annotatielaag. */
+  bematingen?: Bemating[];
   /** Teksthoogte in meters (default 2.5 — leesbaar op 1:500/1:1000). */
   tekstHoogteM?: number;
 }
@@ -194,6 +197,25 @@ export function generateTraceDxf(input: TraceDxfInput): string {
     if (kruising.label) {
       writer.addText(point3d(x + tekstHoogte * 1.4, y), tekstHoogte * 0.8, kruising.label, {
         layerName: DXF_LAGEN.kruising.naam,
+      });
+    }
+  }
+
+  // Bemating: maatlijnen + maathulplijnen + boog + label op de annotatielaag
+  for (const bemating of input.bematingen ?? []) {
+    const geo = bematingGeometrie(bemating);
+    const laag = DXF_LAGEN.annotatie.naam;
+    if (geo.type === 'lineair') {
+      writer.addLWPolyline(naarVertices([geo.maatlijn[0], geo.maatlijn[1]]), { layerName: laag });
+      writer.addLWPolyline(naarVertices([geo.extensie1[0], geo.extensie1[1]]), { layerName: laag });
+      writer.addLWPolyline(naarVertices([geo.extensie2[0], geo.extensie2[1]]), { layerName: laag });
+      writer.addText(point3d(geo.tekstPos[0], geo.tekstPos[1]), tekstHoogte * 0.8, geo.label, {
+        layerName: laag,
+      });
+    } else {
+      writer.addLWPolyline(naarVertices(geo.boog), { layerName: laag });
+      writer.addText(point3d(geo.tekstPos[0], geo.tekstPos[1]), tekstHoogte * 0.8, geo.label, {
+        layerName: laag,
       });
     }
   }

@@ -1,5 +1,6 @@
 import type { Discipline, TraceFase } from '@/lib/db/types';
 import type { TraceSegment } from './roads';
+import type { Bemating } from '@/lib/map/bemating';
 
 export interface DemoTrace {
   id: string;
@@ -18,6 +19,8 @@ export interface DemoTrace {
   leglocatie: string;
   segmenten: TraceSegment[];
   omschrijving: string;
+  /** Handmatig geplaatste bematingen (lineair + hoek) — AutoCAD-stijl */
+  bematingen?: Bemating[];
 }
 
 /**

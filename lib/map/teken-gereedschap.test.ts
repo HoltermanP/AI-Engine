@@ -6,6 +6,8 @@ import {
   puntOpAfstand,
   segmentMaat,
   snapPunt,
+  trimPolyline,
+  extendPolyline,
 } from './teken-gereedschap';
 import type { TraceLine } from '@/lib/trace-edit';
 
@@ -99,5 +101,81 @@ describe('offsetPolyline', () => {
 describe('meetLengteM', () => {
   it('telt de meetlijn op', () => {
     expect(meetLengteM([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }])).toBeCloseTo(150, 5);
+  });
+});
+
+describe('trimPolyline (TRIM)', () => {
+  const horizontaal: TraceLine = [
+    [0, 0, -0.65],
+    [100, 0, -0.65],
+  ];
+  // Verticale snijlijn op x = 60
+  const snijlijn: TraceLine = [
+    [60, -20, -0.65],
+    [60, 20, -0.65],
+  ];
+
+  it('snijdt het overstekende staartstuk weg tot de snijlijn', () => {
+    // Klik op het deel ná de snijlijn (x > 60) → tail verdwijnt
+    const res = trimPolyline(horizontaal, [snijlijn], 80, 0);
+    expect(res).not.toBeNull();
+    expect(res!).toHaveLength(1);
+    const overgebleven = res![0];
+    expect(overgebleven[0][0]).toBeCloseTo(0, 5);
+    expect(overgebleven[overgebleven.length - 1][0]).toBeCloseTo(60, 5);
+  });
+
+  it('snijdt het kopstuk weg bij een klik vóór de snijlijn', () => {
+    const res = trimPolyline(horizontaal, [snijlijn], 20, 0);
+    expect(res![0][0][0]).toBeCloseTo(60, 5);
+    expect(res![0][res![0].length - 1][0]).toBeCloseTo(100, 5);
+  });
+
+  it('splitst in twee delen bij twee snijlijnen rond de klik', () => {
+    const snij2: TraceLine = [
+      [30, -20, -0.65],
+      [30, 20, -0.65],
+    ];
+    const res = trimPolyline(horizontaal, [snijlijn, snij2], 45, 0);
+    expect(res).toHaveLength(2);
+    expect(res![0][res![0].length - 1][0]).toBeCloseTo(30, 5);
+    expect(res![1][0][0]).toBeCloseTo(60, 5);
+  });
+
+  it('geeft null als geen snijlijn de lijn kruist', () => {
+    const verweg: TraceLine = [
+      [200, -20, -0.65],
+      [200, 20, -0.65],
+    ];
+    expect(trimPolyline(horizontaal, [verweg], 50, 0)).toBeNull();
+  });
+});
+
+describe('extendPolyline (EXTEND)', () => {
+  const lijn: TraceLine = [
+    [0, 0, -0.65],
+    [50, 0, -0.65],
+  ];
+  // Grenslijn (verticaal) op x = 80
+  const grens: TraceLine = [
+    [80, -20, -0.65],
+    [80, 20, -0.65],
+  ];
+
+  it('verlengt het uiteinde tot de grenslijn', () => {
+    const res = extendPolyline(lijn, [grens], 50, 0); // klik bij eindpunt
+    expect(res).not.toBeNull();
+    const laatste = res![res!.length - 1];
+    expect(laatste[0]).toBeCloseTo(80, 5);
+    expect(laatste[1]).toBeCloseTo(0, 5);
+    expect(res!.length).toBe(3);
+  });
+
+  it('geeft null als de grenslijn niet vóór het uiteinde ligt', () => {
+    const achter: TraceLine = [
+      [-30, -20, -0.65],
+      [-30, 20, -0.65],
+    ];
+    expect(extendPolyline(lijn, [achter], 50, 0)).toBeNull();
   });
 });

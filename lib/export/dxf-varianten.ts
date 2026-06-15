@@ -71,6 +71,7 @@ export function dxfVariant(trace: DemoTrace, variant: string): { dxf: string; su
           naam: `${trace.code} — ${trace.naam}`,
           centerline: trace.coordinates.map(([x, y]) => [x, y] as [number, number]),
           bestaandNet,
+          bematingen: trace.bematingen,
         }),
       };
     }

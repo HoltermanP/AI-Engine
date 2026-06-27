@@ -51,4 +51,6 @@ export interface BodemGebiedRef {
   bufferM?: number;
   /** Stabiele cache-sleutel voor dit gebied. */
   gebiedKey: string;
+  /** Korte omschrijving voor in het rapport (bv. tracénaam). */
+  omschrijving?: string;
 }

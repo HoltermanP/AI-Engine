@@ -8,7 +8,7 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
-import { bodemSignalering } from '@/lib/db/schema';
+import { bodemRapport, bodemSignalering } from '@/lib/db/schema';
 import { fetchAhnElevation } from '@/lib/connectors/pdok/wfs-client';
 import type { BodemTraceKruising } from '@/lib/services/bodem-risico/types';
 import { ingestWbbVoorGebied, type IngestResult } from './ingest';
@@ -19,6 +19,7 @@ import {
   signalenVanKruisingen,
   type HoogteSample,
 } from './signals';
+import { genereerNen5725Rapport, type Nen5725Rapport } from './nen5725-rapport';
 import type { BodemGebiedRef, BodemSignaal } from './types';
 
 /** Standaard bufferbreedte rond het tracé (m) voor de invloedszone. */
@@ -32,6 +33,8 @@ export interface BodemAnalyseResultaat {
   signalen: BodemSignaal[];
   /** Aantal kritische signalen — handig voor samenvattingen. */
   aantalKritisch: number;
+  /** Gegenereerd NEN 5725 concept-rapport. */
+  rapport: Nen5725Rapport;
 }
 
 /** Bouwt een 2D LINESTRING-WKT (RD/28992) uit tracé-coördinaten. */
@@ -178,6 +181,25 @@ async function persistSignalen(
   return true;
 }
 
+/** Persisteert het concept-rapport (vervangt bestaand rapport voor project/tracé). */
+async function persistRapport(ref: BodemGebiedRef, rapport: Nen5725Rapport): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  if (ref.projectId) {
+    await db.delete(bodemRapport).where(eq(bodemRapport.projectId, ref.projectId));
+  } else if (ref.traceId) {
+    await db.delete(bodemRapport).where(eq(bodemRapport.traceId, ref.traceId));
+  }
+  await db.insert(bodemRapport).values({
+    projectId: ref.projectId ?? null,
+    traceId: ref.traceId ?? null,
+    titel: rapport.titel,
+    secties: rapport.secties,
+    markdown: rapport.markdown,
+    status: rapport.status,
+  });
+}
+
 /**
  * Voert het volledige bodem-vooronderzoek uit voor een gebied: ingest WBB,
  * leidt de vier signaaltypes af en persisteert ze. Werkt met een tracé (buffer-
@@ -226,11 +248,20 @@ export async function analyseerBodemVooronderzoek(
   // (4) Archief-gat (altijd, handmatig).
   signalen.push(...signalenArchiefGat(bronDatum));
 
+  const heeftTrace = !!(ref.trace && ref.trace.length >= 2);
+  const rapport = genereerNen5725Rapport(signalen, {
+    gebiedOmschrijving: ref.omschrijving ?? ref.gebiedKey,
+    bufferM,
+    heeftTrace,
+  });
+
   await persistSignalen(ref, signalen);
+  await persistRapport(ref, rapport);
 
   return {
     ingest,
     signalen,
     aantalKritisch: signalen.filter((s) => s.ernst === 'kritisch').length,
+    rapport,
   };
 }

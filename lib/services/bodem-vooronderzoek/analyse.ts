@@ -158,6 +158,8 @@ async function persistSignalen(
 ): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
+  // Zonder project-/tracé-scope niet persisteren (voorkomt ophoping bij bbox-only).
+  if (!ref.projectId && !ref.traceId) return false;
   if (ref.projectId) {
     await db.delete(bodemSignalering).where(eq(bodemSignalering.projectId, ref.projectId));
   } else if (ref.traceId) {
@@ -185,6 +187,7 @@ async function persistSignalen(
 async function persistRapport(ref: BodemGebiedRef, rapport: Nen5725Rapport): Promise<void> {
   const db = getDb();
   if (!db) return;
+  if (!ref.projectId && !ref.traceId) return;
   if (ref.projectId) {
     await db.delete(bodemRapport).where(eq(bodemRapport.projectId, ref.projectId));
   } else if (ref.traceId) {

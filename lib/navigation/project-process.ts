@@ -3,6 +3,7 @@ import {
   FolderKanban,
   Network,
   GitBranch,
+  Mountain,
   CalendarDays,
   FolderOpen,
   FileBarChart,
@@ -12,6 +13,7 @@ export type ProjectProcessStepId =
   | 'overzicht'
   | 'netontwerp'
   | 'trace'
+  | 'bodem'
   | 'planning'
   | 'dossier'
   | 'rapportage';
@@ -59,9 +61,18 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
         : `/project/${projectId}/trace`,
   },
   {
-    id: 'planning',
+    id: 'bodem',
     nummer: 4,
     label: 'Stap 4',
+    titel: 'Bodemvooronderzoek',
+    beschrijving: 'Open bodemdata aggregeren en signaleren (NEN 5725-assistent)',
+    icon: Mountain,
+    href: (projectId) => `/project/${projectId}/bodem`,
+  },
+  {
+    id: 'planning',
+    nummer: 5,
+    label: 'Stap 5',
     titel: 'Planning',
     beschrijving: 'Activiteiten, milestones en Gantt-overzicht',
     icon: CalendarDays,
@@ -69,8 +80,8 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
   },
   {
     id: 'dossier',
-    nummer: 5,
-    label: 'Stap 5',
+    nummer: 6,
+    label: 'Stap 6',
     titel: 'Dossier',
     beschrijving: 'Documenten, tekeningen en rapporten bundelen',
     icon: FolderOpen,
@@ -78,8 +89,8 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
   },
   {
     id: 'rapportage',
-    nummer: 6,
-    label: 'Stap 6',
+    nummer: 7,
+    label: 'Stap 7',
     titel: 'Rapportage',
     beschrijving: 'Projectstatus en inzichten delen',
     icon: FileBarChart,
@@ -90,6 +101,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
 export function resolveProjectProcessStep(pathname: string): ProjectProcessStepId {
   if (pathname.includes('/netontwerp')) return 'netontwerp';
   if (pathname.includes('/trace/')) return 'trace';
+  if (pathname.includes('/bodem')) return 'bodem';
   if (pathname.includes('/planning')) return 'planning';
   if (pathname.includes('/dossier')) return 'dossier';
   if (pathname.startsWith('/rapportage/')) return 'rapportage';

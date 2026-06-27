@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { BboxQuery } from '@/lib/connectors/types';
 import { getDb } from '@/lib/db';
 import { parseLineStringZ } from '@/lib/db/geometry';
+import { getTraceInternalId } from '@/lib/db/store';
 import {
   analyseerBodemVooronderzoek,
   DEFAULT_BUFFER_M,
@@ -80,11 +81,14 @@ export async function POST(request: Request) {
         ? gebiedKeyVoorTrace(body.traceId, bufferM)
         : gebiedKeyVoorBbox(bbox);
 
+    // De bodem-tabellen koppelen op de interne trace-uuid; de UI levert de
+    // legacy-id. Resolve hier zodat de FK klopt (legacy-id blijft cache-sleutel).
+    const traceUuid = body.traceId ? await getTraceInternalId(body.traceId) : null;
+
     const ref: BodemGebiedRef = {
       bbox,
       trace,
-      traceId: body.traceId,
-      projectId: body.projectId,
+      traceId: traceUuid ?? undefined,
       bufferM,
       gebiedKey,
       omschrijving: body.omschrijving,

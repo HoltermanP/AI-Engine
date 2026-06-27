@@ -32,3 +32,13 @@ export function pointWkt(x: number, y: number, z?: number): string {
 export function geomExpr(wkt: string) {
   return `ST_SetSRID(ST_GeomFromText('${wkt.replace(/'/g, "''")}'), ${SRID})`;
 }
+
+/**
+ * SQL-expressie voor een GeoJSON-geometrie (polygon/multipolygon met gaten).
+ * De coördinaten moeten al in RD/28992 staan (bv. ArcGIS-query met outSR=28992);
+ * GeoJSON draagt geen SRID, dus die zetten we expliciet.
+ */
+export function geomFromGeoJsonExpr(geometry: object) {
+  const json = JSON.stringify(geometry).replace(/'/g, "''");
+  return `ST_SetSRID(ST_GeomFromGeoJSON('${json}'), ${SRID})`;
+}

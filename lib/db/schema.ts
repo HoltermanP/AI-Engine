@@ -6,6 +6,7 @@ import {
   jsonb,
   real,
   integer,
+  boolean,
   customType,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
@@ -182,6 +183,53 @@ export const conflict = pgTable('conflict', {
   waardeEis: real('waarde_eis'),
   toelichting: text('toelichting'),
   geom: geometry('geom'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ── Bodem-vooronderzoek (NEN 5725-assistent) ──────────────────────────
+// Gecachte Bodemloket WBB-vector per projectgebied; SRID 28992 via geomExpr().
+export const bodemLocatie = pgTable('bodem_locatie', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => project.id),
+  gebiedKey: text('gebied_key'),
+  locatiecode: text('locatiecode').notNull(),
+  dossier: text('dossier'),
+  status: text('status').notNull(),
+  vervolgWbb: text('vervolg_wbb'),
+  statusOordeel: text('status_oordeel'),
+  bron: text('bron').notNull().default('bodemloket-wbb'),
+  geom: geometry('geom'),
+  fetchedAt: timestamp('fetched_at').defaultNow().notNull(),
+  source: text('_source').notNull().default('live'),
+});
+
+// Afgeleide ruimtelijke signaleringen per project/tracé.
+export const bodemSignalering = pgTable('bodem_signalering', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => project.id),
+  traceId: uuid('trace_id').references(() => trace.id),
+  type: text('type').notNull(),
+  ernst: text('ernst').notNull(),
+  automatiseerbaar: boolean('automatiseerbaar').notNull().default(true),
+  bron: text('bron').notNull(),
+  bronDatum: timestamp('bron_datum'),
+  locatiecode: text('locatiecode'),
+  afstandM: real('afstand_m'),
+  toelichting: text('toelichting'),
+  geom: geometry('geom'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Gegenereerd NEN 5725 concept-rapport (nooit 'compleet'/'conform').
+export const bodemRapport = pgTable('bodem_rapport', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => project.id),
+  traceId: uuid('trace_id').references(() => trace.id),
+  titel: text('titel').notNull(),
+  secties: jsonb('secties').notNull(),
+  markdown: text('markdown').notNull(),
+  status: text('status').notNull().default('concept'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

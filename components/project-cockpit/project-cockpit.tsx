@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Map as MapIcon, PanelRightClose } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -75,13 +82,43 @@ export function ProjectCockpit({
   // (anders zou hij op de breed-landingsstap verborgen opstarten en blanco blijven).
   const [kaartVerborgen, setKaartVerborgen] = useState(false);
   const eersteRender = useRef(true);
+
+  // Sleepbare scheiding: breedte van het zijpaneel (px) op desktop.
+  const KAART_DEFAULT = 380;
+  const BREED_DEFAULT = 760;
+  const [panelBreedte, setPanelBreedte] = useState(kaartCentrisch ? KAART_DEFAULT : BREED_DEFAULT);
+  const splitRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (eersteRender.current) {
       eersteRender.current = false;
       return;
     }
     setKaartVerborgen(!kaartCentrisch);
+    setPanelBreedte(kaartCentrisch ? KAART_DEFAULT : BREED_DEFAULT);
   }, [kaartCentrisch, activeStep]);
+
+  const startSlepen = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    const container = splitRef.current;
+    if (!container) return;
+    const links = container.getBoundingClientRect().left;
+    const breedte = container.getBoundingClientRect().width;
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.min(breedte - 320, Math.max(280, ev.clientX - links));
+      setPanelBreedte(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  }, []);
 
   const gaNaarStap = useCallback(
     (stap: ProjectProcessStepId) => {
@@ -151,16 +188,18 @@ export function ProjectCockpit({
 
         <CockpitStepRail />
 
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          {/* Zijpaneel — breedte afhankelijk van stap-layout en kaart-zichtbaarheid */}
+        <div ref={splitRef} className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          {/* Zijpaneel — breedte instelbaar via de sleepbalk (desktop). */}
           <aside
+            style={kaartVerborgen ? undefined : ({ ['--pw' as string]: `${panelBreedte}px` } as CSSProperties)}
             className={cn(
-              'w-full shrink-0 overflow-y-auto bg-background',
+              'w-full overflow-y-auto bg-background',
               kaartVerborgen
                 ? 'lg:flex-1'
-                : kaartCentrisch
-                  ? 'max-h-[42dvh] border-b border-border lg:max-h-none lg:w-[380px] lg:border-b-0 lg:border-r'
-                  : 'border-b border-border lg:flex-1 lg:border-b-0 lg:border-r'
+                : cn(
+                    'max-h-[42dvh] border-b border-border lg:max-h-none lg:w-[var(--pw)] lg:shrink-0 lg:border-b-0',
+                    !kaartCentrisch && 'lg:border-b'
+                  )
             )}
           >
             <CockpitSidePanel
@@ -169,17 +208,23 @@ export function ProjectCockpit({
             />
           </aside>
 
-          {/* De BLIJVENDE kaart — stabiele positie (tweede kind), nooit unmount.
-              Verbergen gebeurt via 'hidden' (display:none); ResizeObserver in de
-              kaart herstelt de grootte bij opnieuw tonen. */}
+          {/* Sleepbalk tussen paneel en kaart (alleen desktop, kaart zichtbaar). */}
+          {!kaartVerborgen && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              onMouseDown={startSlepen}
+              className="hidden w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-[#2D6FE8]/50 lg:block"
+              title="Sleep om de breedte aan te passen"
+            />
+          )}
+
+          {/* De BLIJVENDE kaart — stabiele positie, nooit unmount. Verbergen via
+              'hidden' (display:none); ResizeObserver herstelt de grootte bij tonen. */}
           <div
             className={cn(
               'relative min-w-0',
-              kaartVerborgen
-                ? 'hidden'
-                : kaartCentrisch
-                  ? 'min-h-[320px] flex-1 lg:min-h-0'
-                  : 'min-h-[320px] flex-1 lg:min-h-0 lg:max-w-[520px]'
+              kaartVerborgen ? 'hidden' : 'min-h-[320px] flex-1 lg:min-h-0'
             )}
           >
             <CockpitMap />

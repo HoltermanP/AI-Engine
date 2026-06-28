@@ -60,7 +60,7 @@ export function CalcResultsGrouped({ berekeningen }: CalcResultsGroupedProps) {
                 {items.length} berekening{items.length !== 1 ? 'en' : ''}
               </Badge>
             </div>
-            <div className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {items.map((b) => (
                 <Card key={b.type} className="border-l-4" style={{ borderLeftColor: kleur }}>
                   <CardHeader className="p-3 pb-1">

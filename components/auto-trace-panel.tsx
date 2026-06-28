@@ -12,7 +12,7 @@ import type { TraceRoutingResult, TraceRouteAlternative, TraceWaypoint } from '@
 import type { ZroPerceel } from '@/lib/services/trace-routing/types';
 import { cn } from '@/lib/utils';
 
-const ZRO_EIGENAAR_LABEL: Record<ZroPerceel['eigenaarType'], string> = {
+export const ZRO_EIGENAAR_LABEL: Record<ZroPerceel['eigenaarType'], string> = {
   particulier: 'Particulier',
   bedrijf: 'Bedrijf',
   gemeente: 'Gemeente',
@@ -20,7 +20,7 @@ const ZRO_EIGENAAR_LABEL: Record<ZroPerceel['eigenaarType'], string> = {
   onbekend: 'Onbekend',
 };
 
-const ZRO_STATUS_LABEL: Record<ZroPerceel['status'], string> = {
+export const ZRO_STATUS_LABEL: Record<ZroPerceel['status'], string> = {
   zakelijk_recht_vereist: 'Zakelijk recht',
   gedoogplicht: 'Gedoogplicht',
   publiek: 'Publiek',
@@ -423,6 +423,7 @@ export function AutoTracePanel({
                         <th className="py-0.5 pr-1 font-medium">Perceel</th>
                         <th className="py-0.5 pr-1 font-medium">Eigenaar</th>
                         <th className="py-0.5 pr-1 text-right font-medium">m</th>
+                        <th className="py-0.5 pr-1 text-right font-medium">Opp. m²</th>
                         <th className="py-0.5 font-medium">Status</th>
                       </tr>
                     </thead>
@@ -432,6 +433,9 @@ export function AutoTracePanel({
                           <td className="py-0.5 pr-1 font-mono">{p.perceelnummer}</td>
                           <td className="py-0.5 pr-1">{ZRO_EIGENAAR_LABEL[p.eigenaarType]}</td>
                           <td className="py-0.5 pr-1 text-right font-mono">{p.lengteDoorPerceelM}</td>
+                          <td className="py-0.5 pr-1 text-right font-mono">
+                            {p.oppervlakteM2 != null ? p.oppervlakteM2.toLocaleString('nl-NL') : '—'}
+                          </td>
                           <td className="py-0.5">
                             <Badge variant="secondary" className="text-[9px]">
                               {ZRO_STATUS_LABEL[p.status]}

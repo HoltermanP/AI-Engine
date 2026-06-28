@@ -245,6 +245,7 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
     id: p.id,
     perceelnummer: p.perceelnummer,
     polygon: p.polygon,
+    oppervlakteM2: p.oppervlakteM2,
     publiek: isPubliekPerceel(p.perceelnummer) || bevatWeg(p.polygon),
   }));
 

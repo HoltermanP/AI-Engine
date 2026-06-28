@@ -20,7 +20,14 @@ export function computeZroOverzicht(
   // Accumuleer lengte per perceel-id
   const acc = new Map<
     string,
-    { perceelnummer: string; lengteM: number; segmenten: Set<number> }
+    {
+      perceelId: string;
+      perceelnummer: string;
+      polygon: [number, number][];
+      oppervlakteM2?: number;
+      lengteM: number;
+      segmenten: Set<number>;
+    }
   >();
 
   // Stapgrootte voor fijne bemonstering langs het tracé (productie-traceLines zijn
@@ -44,7 +51,10 @@ export function computeZroOverzicht(
         const perceel = privatePercelen.find((p) => pointInPolygon(mx, my, p.polygon));
         if (!perceel) continue;
         const entry = acc.get(perceel.id) ?? {
+          perceelId: perceel.id,
           perceelnummer: perceel.perceelnummer,
+          polygon: perceel.polygon,
+          oppervlakteM2: perceel.oppervlakteM2,
           lengteM: 0,
           segmenten: new Set<number>(),
         };
@@ -61,6 +71,9 @@ export function computeZroOverzicht(
     lengteDoorPerceelM: Math.round(e.lengteM),
     segmentVolgorde: [...e.segmenten].sort((a, b) => a - b),
     status: 'eigenaar_onbekend',
+    perceelId: e.perceelId,
+    polygon: e.polygon,
+    oppervlakteM2: e.oppervlakteM2,
   }));
   percelen.sort((a, b) => b.lengteDoorPerceelM - a.lengteDoorPerceelM);
 

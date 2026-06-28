@@ -171,10 +171,13 @@ function verwijderSpikes(
       const b = huidige[i];
       const c = huidige[i + 1];
       const hoek = richtingsveranderingDeg(a, b, c);
-      const bypassLengte = dist(a, c);
       const uitwijking = afstandTotSegment(b[0], b[1], a[0], a[1], c[0], c[1]);
+      // Een ruis-spike (BGT-centerline/knoop-merging) heeft minstens één kort
+      // beentje en wijkt maar weinig af. Een échte kruisingshoek heeft twee
+      // lange wegsegmenten — die mag nooit worden afgesneden.
+      const kortsteBeen = Math.min(dist(a, b), dist(b, c));
 
-      const isSpike = hoek > 45 && bypassLengte < 90 && uitwijking < 30;
+      const isSpike = hoek > 45 && kortsteBeen < 15 && uitwijking < 10;
       if (isSpike) {
         let veilig = true;
         for (const pand of pandPolygonen) {

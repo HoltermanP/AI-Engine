@@ -72,6 +72,12 @@ export interface ZroPerceel {
   status: 'zakelijk_recht_vereist' | 'gedoogplicht' | 'publiek' | 'eigenaar_onbekend';
   /** Bestaand recht indien bekend uit BRK */
   zakelijkRecht?: string;
+  /** Kadastraal perceel-id (BRK) voor koppeling aan kaartgeometrie */
+  perceelId?: string;
+  /** Perceelgeometrie (RD, EPSG:28992) om het perceel op de tekening te markeren */
+  polygon?: [number, number][];
+  /** Kadastrale oppervlakte in m² indien bekend (BRK kadastrale kaart) */
+  oppervlakteM2?: number;
 }
 
 /** Overzicht van zakelijk recht (ZRO) over de particuliere percelen op het tracé. */
@@ -159,7 +165,7 @@ export interface RoutingContext {
   roadCenterlines: { id: string; naam: string; type: string; centerline: [number, number][] }[];
   pandPolygonen: [number, number][][];
   begroeidPolygonen: [number, number][][];
-  percelen: { id: string; perceelnummer: string; polygon: [number, number][]; publiek?: boolean }[];
+  percelen: { id: string; perceelnummer: string; polygon: [number, number][]; publiek?: boolean; oppervlakteM2?: number }[];
   watergangen: { naam: string; coordinates: [number, number][]; breedteM?: number }[];
   belemmeringen: { id: string; categorie: string; naam?: string; coordinates: [number, number][] }[];
   bestaandNet: TraceRoutingInput['bestaandNet'];

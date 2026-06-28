@@ -5,7 +5,14 @@ import {
   getDemoReferentieTraces,
   type DemoReferentieTrace,
 } from '@/lib/db/demo-store';
-import { looksLikeRdNl, wgs84ToRd } from '@/lib/geo';
+import { looksLikeRdNl, looksLikeWgs84Nl, wgs84ToRd } from '@/lib/geo';
+import { polylinesFromDxf } from '@/lib/connectors/cad/dxf-import';
+
+/** Eén ruwe lijn vóór herprojectie: coördinaten in bronstelsel. */
+interface RuweLijn {
+  naam?: string;
+  coords: number[][];
+}
 
 function naarRd(coord: number[]): [number, number] {
   const [a, b] = coord;
@@ -13,10 +20,43 @@ function naarRd(coord: number[]): [number, number] {
   return wgs84ToRd(a, b);
 }
 
-function lijnenUitGeometry(geom: GeoJSON.Geometry): [number, number][][] {
-  if (geom.type === 'LineString') return [geom.coordinates.map(naarRd)];
-  if (geom.type === 'MultiLineString') return geom.coordinates.map((l) => l.map(naarRd));
+/** Ligt het eerste punt herkenbaar in Nederland (RD of WGS84)? Anders geen geldige georeferentie. */
+function lijktGeoref(coords: number[][]): boolean {
+  const [a, b] = coords[0] ?? [];
+  if (a === undefined || b === undefined) return false;
+  return looksLikeRdNl(a, b) || looksLikeWgs84Nl(a, b);
+}
+
+function lijnenUitGeometry(geom: GeoJSON.Geometry, naam?: string): RuweLijn[] {
+  if (geom.type === 'LineString') return [{ naam, coords: geom.coordinates }];
+  if (geom.type === 'MultiLineString') return geom.coordinates.map((coords) => ({ naam, coords }));
   return [];
+}
+
+function ruweLijnenUitGeojson(geojsonText: string): RuweLijn[] | { error: string } {
+  let fc: GeoJSON.FeatureCollection;
+  try {
+    fc = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
+  } catch {
+    return { error: 'Bestand is geen geldige JSON' };
+  }
+  if (fc?.type !== 'FeatureCollection' || !Array.isArray(fc.features)) {
+    return { error: 'Bestand is geen GeoJSON FeatureCollection' };
+  }
+  const lijnen: RuweLijn[] = [];
+  for (const feature of fc.features) {
+    if (!feature.geometry) continue;
+    const props = (feature.properties ?? {}) as Record<string, unknown>;
+    const naam = (props.naam as string) ?? (props.name as string) ?? undefined;
+    lijnen.push(...lijnenUitGeometry(feature.geometry, naam));
+  }
+  return lijnen;
+}
+
+function isDxf(bestandsnaam: string, inhoud: string): boolean {
+  if (bestandsnaam.toLowerCase().endsWith('.dxf')) return true;
+  // DXF begint doorgaans met "0\nSECTION" of bevat de ENTITIES-sectiemarker
+  return /^\s*0\s*[\r\n]+\s*SECTION/.test(inhoud) || /[\r\n]\s*ENTITIES\s*[\r\n]/.test(inhoud);
 }
 
 export interface ReferentieTraceOverzicht {
@@ -44,44 +84,57 @@ export async function listReferentieTracesAction(): Promise<ReferentieTraceOverz
 }
 
 /**
- * Upload van eerder ontworpen tracés (GeoJSON, RD of WGS84). De lijnen worden
- * referentiecorridors: de automatische tracébepaling geeft routes die deze
- * ontwerpen volgen een sterke voorkeur — zo leert het systeem van de praktijk.
+ * Upload van eerder ontworpen tracés (GeoJSON of AutoCAD DXF, RD of WGS84). De
+ * lijnen worden referentiecorridors: de automatische tracébepaling geeft routes
+ * die deze ontwerpen volgen een sterke voorkeur — zo leert het systeem van de
+ * praktijk. DWG eerst in AutoCAD als DXF exporteren (DXFOUT).
  */
 export async function uploadReferentieTracesAction(
   bestandsnaam: string,
-  geojsonText: string
+  inhoud: string
 ): Promise<{ ok: true; aantal: number } | { ok: false; error: string }> {
-  let fc: GeoJSON.FeatureCollection;
-  try {
-    fc = JSON.parse(geojsonText) as GeoJSON.FeatureCollection;
-  } catch {
-    return { ok: false, error: 'Bestand is geen geldige JSON' };
+  let ruwLijnen: RuweLijn[];
+  if (isDxf(bestandsnaam, inhoud)) {
+    ruwLijnen = polylinesFromDxf(inhoud).map((l) => ({ naam: l.naam, coords: l.coordinates }));
+    if (ruwLijnen.length === 0) {
+      return { ok: false, error: 'Geen LINE/LWPOLYLINE/POLYLINE-geometrie in de DXF gevonden' };
+    }
+  } else {
+    const parsed = ruweLijnenUitGeojson(inhoud);
+    if ('error' in parsed) return { ok: false, error: parsed.error };
+    ruwLijnen = parsed;
   }
-  if (fc?.type !== 'FeatureCollection' || !Array.isArray(fc.features)) {
-    return { ok: false, error: 'Bestand is geen GeoJSON FeatureCollection' };
+
+  // Filter op geldige lijnen en valideer georeferentie (anders stille onzin)
+  const bruikbaar = ruwLijnen.filter((l) => l.coords.length >= 2);
+  if (bruikbaar.length === 0) {
+    return { ok: false, error: 'Geen lijngeometrie met minimaal 2 punten gevonden' };
+  }
+  if (!bruikbaar.some((l) => lijktGeoref(l.coords))) {
+    return {
+      ok: false,
+      error:
+        'Coördinaten liggen niet herkenbaar in Nederland (RD/Rijksdriehoek of WGS84). ' +
+        'Exporteer of georefereer het ontwerp in RD (EPSG:28992).',
+    };
   }
 
   const bestaand = getDemoReferentieTraces().length;
   const items: DemoReferentieTrace[] = [];
   let volgnr = 0;
-  for (const feature of fc.features) {
-    if (!feature.geometry) continue;
-    const props = (feature.properties ?? {}) as Record<string, unknown>;
-    for (const line of lijnenUitGeometry(feature.geometry)) {
-      if (line.length < 2) continue;
-      volgnr++;
-      items.push({
-        id: `ref-${bestaand + volgnr}`,
-        naam: (props.naam as string) ?? (props.name as string) ?? `Referentietracé ${bestaand + volgnr}`,
-        bron: bestandsnaam,
-        coordinates: line,
-      });
-    }
+  for (const lijn of bruikbaar) {
+    if (!lijktGeoref(lijn.coords)) continue;
+    volgnr++;
+    items.push({
+      id: `ref-${bestaand + volgnr}`,
+      naam: lijn.naam ?? `Referentietracé ${bestaand + volgnr}`,
+      bron: bestandsnaam,
+      coordinates: lijn.coords.map(naarRd),
+    });
   }
 
   if (items.length === 0) {
-    return { ok: false, error: 'Geen LineString/MultiLineString-geometrieën gevonden' };
+    return { ok: false, error: 'Geen geldig georefereerde lijnen gevonden' };
   }
   addDemoReferentieTraces(items);
   return { ok: true, aantal: items.length };

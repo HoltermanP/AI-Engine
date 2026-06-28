@@ -298,10 +298,12 @@ async function fetchPercelenForRouting(
           : (f.geometry.coordinates[0]?.[0] as [number, number][] | undefined);
       if (!ring || ring.length < 4) continue;
 
+      const grootte = Number(props['kadastraleGrootteWaarde']);
       percelen.push({
         id,
         perceelnummer: `${sectie} ${nummer}`,
         polygon: ring.map(([x, y]) => [x, y] as [number, number]),
+        oppervlakteM2: Number.isFinite(grootte) && grootte > 0 ? grootte : undefined,
       });
     }
   }

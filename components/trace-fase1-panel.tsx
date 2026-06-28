@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AutoTracePanel } from '@/components/auto-trace-panel';
+import { AutoTracePanel, ZRO_EIGENAAR_LABEL, ZRO_STATUS_LABEL } from '@/components/auto-trace-panel';
 import { useCockpit, useCockpitMap } from '@/components/project-cockpit/cockpit-context';
 import { DISCIPLINE_LABELS } from '@/lib/db/types';
 import { traceLengthM } from '@/lib/geo';
@@ -191,6 +191,22 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
     }));
   }, [routingResult, selectedAlternativeId]);
 
+  // ZRO-percelen (zakelijk recht) van het geselecteerde alternatief — markering op de tekening
+  const zroPercelen = useMemo(() => {
+    const alt = routingResult?.alternatieven?.find((a) => a.id === selectedAlternativeId);
+    const overzicht = alt?.zroOverzicht ?? routingResult?.zroOverzicht;
+    return (overzicht?.percelen ?? [])
+      .filter((p) => (p.polygon?.length ?? 0) >= 4)
+      .map((p) => ({
+        perceelnummer: p.perceelnummer,
+        polygon: p.polygon as [number, number][],
+        eigenaar: ZRO_EIGENAAR_LABEL[p.eigenaarType],
+        status: ZRO_STATUS_LABEL[p.status],
+        lengteM: p.lengteDoorPerceelM,
+        oppervlakteM2: p.oppervlakteM2,
+      }));
+  }, [routingResult, selectedAlternativeId]);
+
   // Publiceer de tekenconfig naar de gedeelde cockpit-kaart.
   const mapConfig = useMemo(
     () => ({
@@ -201,8 +217,9 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
       onLayerDataChange: setLayerDataSnapshot,
       routeAlternatives,
       markedSegments,
+      zroPercelen,
     }),
-    [autoWaypoints, routeAlternatives, markedSegments]
+    [autoWaypoints, routeAlternatives, markedSegments, zroPercelen]
   );
   useCockpitMap(mapConfig);
 

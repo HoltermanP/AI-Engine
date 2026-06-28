@@ -160,7 +160,7 @@ export interface MapLayerData {
   bgt?: { type: string; label: string; geometry: GeoJSON.Geometry }[];
   bomen?: { id: string; x: number; y: number }[];
   nwb?: { naam: string; type: string; coordinates: [number, number][] }[];
-  percelen?: { id: string; perceelnummer: string; polygon: [number, number][] }[];
+  percelen?: { id: string; perceelnummer: string; polygon: [number, number][]; oppervlakteM2?: number }[];
   watergangen?: { naam: string; type: string; coordinates: [number, number][]; breedteM?: number }[];
   kunstwerken?: { naam: string; type: string; x: number; y: number }[];
   sonderingen?: { id: string; x: number; y: number; qc: number; grondsoort: string }[];
@@ -226,6 +226,15 @@ interface TraceMapProps {
   markedSegments?: {
     marker: 'ok' | 'door_bebouwing' | 'door_privaat';
     coordinates: [number, number, number][];
+  }[];
+  /** Particuliere percelen met zakelijk recht (ZRO) — apart gemarkeerd op de tekening */
+  zroPercelen?: {
+    perceelnummer: string;
+    polygon: [number, number][];
+    eigenaar: string;
+    status: string;
+    lengteM: number;
+    oppervlakteM2?: number;
   }[];
   onMapClick?: (lng: number, lat: number, modifiers?: { alt: boolean }) => void;
   onTraceLinesChange?: (lines: TraceLines) => void;
@@ -784,6 +793,90 @@ function ensureMarkedSegmentLayers(
   });
 }
 
+/**
+ * Markeert de particuliere percelen waarop een zakelijk recht (ZRO) gevestigd
+ * moet worden: opvallende amber vlak + dikke gestreepte rand + perceelnummer.
+ * Onderscheidt zich van de algemene (lichte) BRK-percelenlaag.
+ */
+function ensureZroPercelenLayers(
+  map: MapLibreMap,
+  percelen: {
+    perceelnummer: string;
+    polygon: [number, number][];
+    eigenaar: string;
+    status: string;
+    lengteM: number;
+    oppervlakteM2?: number;
+  }[]
+): void {
+  const sourceId = 'zro-percelen-source';
+  const fillLayer = 'zro-percelen-fill';
+  const lineLayer = 'zro-percelen-line';
+  const labelLayer = 'zro-percelen-label';
+
+  const features: GeoJSON.Feature[] = percelen
+    .filter((p) => p.polygon && p.polygon.length >= 4)
+    .map((p) => ({
+      type: 'Feature',
+      properties: {
+        perceelnummer: p.perceelnummer,
+        eigenaar: p.eigenaar,
+        status: p.status,
+        lengteM: p.lengteM,
+        oppervlakteM2: p.oppervlakteM2 ?? null,
+      },
+      geometry: polygonForLayer(p.polygon),
+    }));
+
+  if (features.length === 0) {
+    for (const id of [labelLayer, lineLayer, fillLayer]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+    return;
+  }
+
+  const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features };
+  const source = map.getSource(sourceId) as GeoJsonSource | undefined;
+  if (source?.setData) {
+    source.setData(data);
+    return;
+  }
+
+  map.addSource(sourceId, { type: 'geojson', data });
+  map.addLayer({
+    id: fillLayer,
+    type: 'fill',
+    source: sourceId,
+    paint: { 'fill-color': '#D97706', 'fill-opacity': 0.18 },
+  });
+  map.addLayer({
+    id: lineLayer,
+    type: 'line',
+    source: sourceId,
+    paint: {
+      'line-color': '#B45309',
+      'line-width': 2.5,
+      'line-opacity': 0.95,
+      'line-dasharray': [2, 1],
+    },
+  });
+  map.addLayer({
+    id: labelLayer,
+    type: 'symbol',
+    source: sourceId,
+    layout: {
+      'text-field': ['get', 'perceelnummer'],
+      'text-size': 11,
+    },
+    paint: {
+      'text-color': '#7C2D12',
+      'text-halo-color': '#ffffff',
+      'text-halo-width': 1.6,
+    },
+  });
+}
+
 export function TraceMap({
   traces,
   bestaandNet = [],
@@ -802,6 +895,7 @@ export function TraceMap({
   autoWaypoints = [],
   routeAlternatives = [],
   markedSegments = [],
+  zroPercelen = [],
   onMapClick,
   onTraceLinesChange,
   onViewportChange,
@@ -1696,6 +1790,7 @@ export function TraceMap({
   }, [mapReady, onAssetVerplaats]);
 
   const tracePopupHandlerRef = useRef<((...args: unknown[]) => void) | null>(null);
+  const zroPopupHandlerRef = useRef<((...args: unknown[]) => void) | null>(null);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1714,6 +1809,34 @@ export function TraceMap({
 
     ensureRouteAlternativeLayers(map, routeAlternatives);
     ensureMarkedSegmentLayers(map, markedSegments);
+    ensureZroPercelenLayers(map, zroPercelen);
+
+    if (zroPopupHandlerRef.current) {
+      map.off('click', 'zro-percelen-fill', zroPopupHandlerRef.current);
+      zroPopupHandlerRef.current = null;
+    }
+    if (map.getLayer('zro-percelen-fill')) {
+      const onZroClick = (...args: unknown[]) => {
+        const e = args[0] as {
+          lngLat: { lng: number; lat: number };
+          features?: { properties?: Record<string, unknown> }[];
+        };
+        const p = e.features?.[0]?.properties ?? {};
+        const rows: [string, string][] = [
+          ['Eigenaar', String(p.eigenaar ?? '—')],
+          ['Status', String(p.status ?? '—')],
+          ['Lengte tracé', `${String(p.lengteM ?? '—')} m`],
+        ];
+        if (p.oppervlakteM2 != null) rows.push(['Oppervlakte', `${String(p.oppervlakteM2)} m²`]);
+        popupRef.current?.remove();
+        popupRef.current = new maplibreModule.Popup({ closeButton: true, maxWidth: '260px' })
+          .setLngLat(e.lngLat)
+          .setHTML(popupHtml(`Perceel ${String(p.perceelnummer ?? '')} · zakelijk recht`, rows))
+          .addTo(map);
+      };
+      map.on('click', 'zro-percelen-fill', onZroClick);
+      zroPopupHandlerRef.current = onZroClick;
+    }
 
     if (tracePopupHandlerRef.current) {
       map.off('click', 'traces-line', tracePopupHandlerRef.current);
@@ -1746,6 +1869,10 @@ export function TraceMap({
         map.off('click', 'traces-line', tracePopupHandlerRef.current);
         tracePopupHandlerRef.current = null;
       }
+      if (zroPopupHandlerRef.current) {
+        map.off('click', 'zro-percelen-fill', zroPopupHandlerRef.current);
+        zroPopupHandlerRef.current = null;
+      }
     };
   }, [
     traces,
@@ -1756,6 +1883,7 @@ export function TraceMap({
     autoWaypoints,
     routeAlternatives,
     markedSegments,
+    zroPercelen,
     mapReady,
     isVisible,
     layerVisibility,

@@ -52,16 +52,18 @@ export function TraceLeerPanel() {
           Tracébepaling trainen met bestaande ontwerpen
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Upload eerder ontworpen tracés (GeoJSON, RD of WGS84). De automatische tracébepaling leert
-          hiervan: routes die een referentieontwerp volgen krijgen een sterke voorkeur en worden in de
-          segmentanalyse als &quot;geleerde voorkeurscorridor&quot; gemarkeerd.
+          Upload eerder ontworpen tracés (GeoJSON of AutoCAD <span className="font-mono">.dxf</span>,
+          RD of WGS84). De automatische tracébepaling leert hiervan: routes die een referentieontwerp
+          volgen krijgen een sterke voorkeur en worden in de segmentanalyse als &quot;geleerde
+          voorkeurscorridor&quot; gemarkeerd. DWG eerst in AutoCAD als DXF exporteren
+          (<span className="font-mono">DXFOUT</span>).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <input
           ref={fileInputRef}
           type="file"
-          accept=".geojson,.json,application/geo+json,application/json"
+          accept=".geojson,.json,.dxf,application/geo+json,application/json,image/vnd.dxf"
           className="hidden"
           onChange={handleFile}
         />

@@ -55,6 +55,15 @@ interface MapWorkspaceProps {
     marker: 'ok' | 'door_bebouwing' | 'door_privaat';
     coordinates: [number, number, number][];
   }[];
+  /** Particuliere percelen met zakelijk recht (ZRO) — gemarkeerd op de tekening */
+  zroPercelen?: {
+    perceelnummer: string;
+    polygon: [number, number][];
+    eigenaar: string;
+    status: string;
+    lengteM: number;
+    oppervlakteM2?: number;
+  }[];
   /** Netontwerp-assets op de kaart (stations/moffen/mantelbuizen) */
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   /** Bodem-vooronderzoek WBB-signalen (4326 GeoJSON) als laag op de kaart. */
@@ -163,6 +172,7 @@ export function MapWorkspace({
   onLayerDataChange,
   routeAlternatives = [],
   markedSegments = [],
+  zroPercelen = [],
   netontwerpAssets,
   bodemSignalen,
   onAssetPlaats,
@@ -612,6 +622,7 @@ export function MapWorkspace({
           autoWaypoints={autoWaypoints}
           routeAlternatives={routeAlternatives}
           markedSegments={markedSegments}
+          zroPercelen={zroPercelen}
           onMapClick={handleTraceEdit}
           onTraceLinesChange={handleTraceLinesChange}
           cadOpties={cadOpties}

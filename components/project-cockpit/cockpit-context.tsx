@@ -41,6 +41,15 @@ export interface CockpitMapConfig {
     marker: 'ok' | 'door_bebouwing' | 'door_privaat';
     coordinates: [number, number, number][];
   }[];
+  /** Particuliere percelen met zakelijk recht (ZRO) — gemarkeerd op de tekening */
+  zroPercelen?: {
+    perceelnummer: string;
+    polygon: [number, number][];
+    eigenaar: string;
+    status: string;
+    lengteM: number;
+    oppervlakteM2?: number;
+  }[];
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   onAssetPlaats?: (x: number, y: number) => void;
   onAssetClick?: (assetId: string) => void;

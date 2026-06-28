@@ -35,7 +35,7 @@ export function WorkflowOverview() {
         </div>
         <div>
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
-            Per tracé in de werkruimte
+            Per tracé in de projectcockpit
           </p>
           <ol className="space-y-2">
             {TRACE_PHASES.map((fase) => (

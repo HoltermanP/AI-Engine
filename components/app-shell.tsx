@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { getFirstTraceIdAction } from '@/lib/actions/data';
-import { useProjectProcess } from '@/components/project-process-provider';
+import { usePathname } from 'next/navigation';
 import {
   Settings,
   FolderKanban,
@@ -19,13 +17,7 @@ import {
 } from 'lucide-react';
 import { CommandPalette } from '@/components/command-palette';
 import { cn } from '@/lib/utils';
-import {
-  extractProjectIdFromPath,
-  extractTraceIdFromPath,
-  getProjectProcessStepHref,
-  resolveProjectProcessStep,
-  PROJECT_PROCESS_STEPS,
-} from '@/lib/navigation/project-process';
+import { extractProjectIdFromPath } from '@/lib/navigation/project-process';
 
 interface NavItem {
   href: string;
@@ -128,78 +120,25 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-function ProjectContextPanel({ projectId, pathname }: { projectId: string; pathname: string }) {
-  const process = useProjectProcess();
-  const searchParams = useSearchParams();
-  const activeStep = resolveProjectProcessStep(searchParams.get('stap'));
-  const [fetchedTraceId, setFetchedTraceId] = useState<string | null>(null);
-  const isOnProject = pathname.startsWith('/project/') || pathname.startsWith('/rapportage/');
-
-  const traceLinkId =
-    process?.traceLinkId ??
-    extractTraceIdFromPath(pathname) ??
-    fetchedTraceId;
-
-  useEffect(() => {
-    if (process || extractTraceIdFromPath(pathname)) return;
-    let cancelled = false;
-    getFirstTraceIdAction(projectId).then((id) => {
-      if (!cancelled) setFetchedTraceId(id);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, pathname, process]);
-
-  if (!isOnProject) return null;
-
-  const itemClass = (active: boolean) =>
-    cn(
-      'flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs transition-colors',
-      active
-        ? 'bg-[#2D6FE8]/15 text-white'
-        : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-300'
-    );
-
+/**
+ * Compacte projectcontext in de sidebar. De processtappen zelf staan in de
+ * stap-rail bovenin de cockpit (één navigatie i.p.v. twee); hier alleen een
+ * snelle terugweg naar het portfolio.
+ */
+function ProjectContextPanel({ pathname }: { pathname: string }) {
+  if (!pathname.startsWith('/project/')) return null;
   return (
-    <div className="relative border-t border-white/[0.06] px-3 py-3">
-      <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-        Werkruimte
+    <div className="relative mt-2 border-t border-white/[0.06] px-3 py-3">
+      <Link
+        href="/dashboard"
+        className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-white"
+      >
+        <FolderKanban className="h-3.5 w-3.5 shrink-0 opacity-70" />
+        <span className="truncate">Alle projecten</span>
+      </Link>
+      <p className="mt-1.5 px-3 text-[10px] leading-relaxed text-slate-500">
+        Doorloop de processtappen via de balk bovenin de cockpit.
       </p>
-      <div className="space-y-0.5">
-        {PROJECT_PROCESS_STEPS.map((step) => {
-          const href = getProjectProcessStepHref(
-            step.id,
-            projectId,
-            step.id === 'trace' ? traceLinkId : undefined
-          );
-          const active = pathname.startsWith(`/project/${projectId}`) && step.id === activeStep;
-
-          const Icon = step.icon;
-          const isCurrentPage = active;
-
-          const inner = (
-            <>
-              <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
-              <span className="truncate font-medium">{step.titel}</span>
-            </>
-          );
-
-          if (isCurrentPage) {
-            return (
-              <div key={step.id} className={itemClass(active)} aria-current="page">
-                {inner}
-              </div>
-            );
-          }
-
-          return (
-            <Link key={step.id} href={href} prefetch className={itemClass(active)}>
-              {inner}
-            </Link>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -274,7 +213,7 @@ function SidebarContent({
           </div>
         ))}
 
-        {projectId && <ProjectContextPanel projectId={projectId} pathname={pathname} />}
+        {projectId && <ProjectContextPanel pathname={pathname} />}
       </nav>
 
       <div className="relative border-t border-white/[0.06] p-4">

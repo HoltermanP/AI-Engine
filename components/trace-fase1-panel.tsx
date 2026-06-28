@@ -189,8 +189,17 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
     routingResult?.segmenten ??
     [];
 
+  const heeftGeometrie = (coords?.length ?? 0) >= 2;
+
   return (
     <div className="space-y-3 p-3">
+      {!heeftGeometrie && (
+        <div className="rounded-md border border-[#2D6FE8]/30 bg-[#2D6FE8]/5 p-2.5 text-[11px] text-[#1e40af]">
+          <span className="font-medium">Volgende actie:</span> plaats waypoints op de kaart
+          (modus <span className="font-mono">Auto-tracé</span>) en klik “Bereken tracé”, of teken
+          het tracé handmatig met de tekentools.
+        </div>
+      )}
       <AutoTracePanel
         waypoints={autoWaypoints}
         onClearWaypoints={() => {

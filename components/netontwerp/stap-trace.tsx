@@ -101,7 +101,7 @@ export function StapTrace({
           className="flex items-center gap-1.5 text-xs text-[#2D6FE8] hover:underline"
         >
           <ExternalLink className="h-3 w-3" />
-          Open tracé-werkruimte (data, risico’s, engineering)
+          Open in de cockpit (data, risico’s, engineering)
         </Link>
       )}
     </div>

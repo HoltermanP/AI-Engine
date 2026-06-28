@@ -26,7 +26,7 @@ function pageSubtitle(fase?: string): string {
   if (fase && ['VO', 'DO', 'UO', 'as_built'].includes(fase)) {
     return `Gefilterd op ${FASE_LABELS[fase as TraceFase]} — voortgang, conflicten en locatiegegevens per tracé.`;
   }
-  return 'Overzicht van alle tracés in het portfolio — filter op fase, discipline, uitvoeringsstatus en conflicten en ga door naar de werkruimte.';
+  return 'Overzicht van alle tracés in het portfolio — filter op fase, discipline, uitvoeringsstatus en conflicten en ga door naar de projectcockpit.';
 }
 
 export default async function TracesPage({ searchParams }: TracesPageProps) {

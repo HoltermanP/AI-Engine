@@ -3,7 +3,7 @@ import proj4 from 'proj4';
 proj4.defs('EPSG:4258', '+proj=longlat +ellps=GRS80 +no_defs +type=crs');
 proj4.defs(
   'EPSG:28992',
-  '+proj=sterea +lat_0=52.15616055555555 +lon_0=5.38763888888889 +k=0.9999079 +x_0=155000 +y_0=463000 +ellps=bessel +towgs84=565.04,49.71,465.84,1.9342,-1.6672,9.1019,-4.0725 +units=m +no_defs'
+  '+proj=sterea +lat_0=52.15616055555555 +lon_0=5.38763888888889 +k=0.9999079 +x_0=155000 +y_0=463000 +ellps=bessel +towgs84=565.417,50.3319,465.552,-0.398957,0.343988,-1.8774,4.0725 +units=m +no_defs'
 );
 
 /** Parse GeoPackage binary / WKB hex blob naar polygonringen in RD (EPSG:28992). */

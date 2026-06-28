@@ -28,6 +28,7 @@ export default async function RapportagePage() {
               title={`Maandrapportage — ${portfolio.periode}`}
               filename={`maandrapportage_${portfolio.periode.replace(/\s+/g, '_')}`}
               size="default"
+              onDark
               pdfMeta={{
                 subtitel: `Portfolio-overzicht · ${kpis.actieveProjecten} actieve projecten`,
                 periode: portfolio.periode,

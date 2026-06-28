@@ -8,17 +8,29 @@ interface KpiStripProps {
   kpis: ManagementKPIs;
 }
 
+type Accent = 'blauw' | 'groen' | 'paars' | 'amber' | 'rood';
+
 interface StripItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   waarde: string | number;
   label: string;
-  accent?: 'blauw' | 'amber' | 'rood';
+  accent: Accent;
+  alarm?: boolean;
 }
 
+const ACCENT: Record<Accent, { chip: string; icon: string; waarde?: string }> = {
+  blauw: { chip: 'bg-[#2D6FE8]/10 ring-[#2D6FE8]/15', icon: 'text-[#2D6FE8]' },
+  groen: { chip: 'bg-emerald-500/10 ring-emerald-500/15', icon: 'text-emerald-600' },
+  paars: { chip: 'bg-violet-500/10 ring-violet-500/15', icon: 'text-violet-600' },
+  amber: { chip: 'bg-amber-500/10 ring-amber-500/15', icon: 'text-amber-600' },
+  rood: { chip: 'bg-red-500/10 ring-red-500/15', icon: 'text-red-600', waarde: 'text-red-600' },
+};
+
 /**
- * Smalle, klikbare KPI-balk bovenaan het dashboard: één oogopslag-overzicht
- * dat geen ruimte wegneemt van de projectenlijst (snel naar een project).
+ * Klikbare KPI-balk bovenaan het dashboard: overzicht in één oogopslag met
+ * ruime, goed leesbare cijfers en icoon-chips, zonder ruimte weg te nemen van
+ * de projectenlijst.
  */
 export function KpiStrip({ kpis }: KpiStripProps) {
   const items: StripItem[] = [
@@ -34,12 +46,14 @@ export function KpiStrip({ kpis }: KpiStripProps) {
       icon: Spline,
       waarde: kpis.totaalTraces,
       label: 'tracés',
+      accent: 'groen',
     },
     {
       href: rapportageUrl(),
       icon: Ruler,
       waarde: `${kpis.totaleTracelengteKm} km`,
       label: 'totale lengte',
+      accent: 'paars',
     },
     {
       href: actiesUrl(),
@@ -54,47 +68,48 @@ export function KpiStrip({ kpis }: KpiStripProps) {
       waarde: kpis.blokkerendeActies,
       label: 'risico’s',
       accent: 'rood',
+      alarm: kpis.blokkerendeActies > 0,
     },
   ];
 
-  const accentText: Record<NonNullable<StripItem['accent']>, string> = {
-    blauw: 'text-[#2D6FE8]',
-    amber: 'text-amber-600',
-    rood: 'text-red-600',
-  };
-
   return (
-    <div className="flex flex-wrap items-stretch gap-2 rounded-xl border border-border bg-card p-1.5 shadow-[var(--shadow-soft)]">
-      {items.map(({ href, icon: Icon, waarde, label, accent }) => (
-        <Link
-          key={label}
-          href={href}
-          className="group flex min-w-[8.5rem] flex-1 items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-muted"
-          aria-label={`${waarde} ${label}`}
-        >
-          <Icon
+    <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-card p-2 shadow-[var(--shadow-soft)] sm:grid-cols-3 lg:flex lg:items-stretch lg:gap-1">
+      {items.map(({ href, icon: Icon, waarde, label, accent, alarm }, i) => {
+        const a = ACCENT[accent];
+        return (
+          <Link
+            key={label}
+            href={href}
+            aria-label={`${waarde} ${label}`}
             className={cn(
-              'h-4 w-4 shrink-0',
-              accent ? accentText[accent] : 'text-muted-foreground'
+              'group flex items-center gap-3 rounded-xl px-3.5 py-3 transition-all hover:bg-muted/70 lg:flex-1',
+              i > 0 && 'lg:border-l lg:border-border/60'
             )}
-          />
-          <div className="min-w-0">
+          >
             <span
               className={cn(
-                'font-[family-name:var(--font-ibm-plex-mono)] text-lg font-bold leading-none',
-                accent === 'rood' && Number(kpis.blokkerendeActies) > 0
-                  ? 'text-red-600'
-                  : 'text-foreground'
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105',
+                a.chip
               )}
             >
-              {waarde}
+              <Icon className={cn('h-5 w-5', a.icon)} />
             </span>
-            <p className="truncate text-[11px] text-muted-foreground group-hover:text-foreground">
-              {label}
-            </p>
-          </div>
-        </Link>
-      ))}
+            <div className="min-w-0">
+              <span
+                className={cn(
+                  'block font-[family-name:var(--font-ibm-plex-mono)] text-2xl font-bold leading-none tracking-tight',
+                  alarm ? a.waarde : 'text-foreground'
+                )}
+              >
+                {waarde}
+              </span>
+              <p className="mt-1 truncate text-xs font-medium text-muted-foreground group-hover:text-foreground">
+                {label}
+              </p>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

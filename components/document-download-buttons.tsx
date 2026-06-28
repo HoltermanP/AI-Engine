@@ -12,6 +12,9 @@ interface DocumentDownloadButtonsProps {
   filename: string;
   size?: 'sm' | 'default';
   className?: string;
+  /** Knoppen staan op een donkere achtergrond (bv. donkere PageHero) — geef de
+   * Word-knop dan witte tekst/rand zodat hij leesbaar blijft. */
+  onDark?: boolean;
   pdfMeta?: {
     subtitel?: string;
     periode?: string;
@@ -26,6 +29,7 @@ export function DocumentDownloadButtons({
   filename,
   size = 'sm',
   className,
+  onDark = false,
   pdfMeta,
 }: DocumentDownloadButtonsProps) {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -67,7 +71,13 @@ export function DocumentDownloadButtons({
       <Button
         size={size}
         variant="outline"
-        className={btnClass}
+        className={cn(
+          btnClass,
+          // Op een donkere banner is de standaard outline-knop nauwelijks
+          // leesbaar; geef hem dan witte tekst, rand en een subtiele vulling.
+          onDark &&
+            'border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white dark:border-white/40 dark:bg-white/10 dark:hover:bg-white/20'
+        )}
         onClick={handleWord}
         disabled={downloadingWord}
       >

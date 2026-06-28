@@ -72,7 +72,7 @@ export function PlanningActiviteiten({ planning }: PlanningActiviteitenProps) {
         </Select>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid items-start gap-2 xl:grid-cols-2">
         {filtered.map((a) => {
           const isOpen = expanded.has(a.id);
           const predLabels = a.voorgangers

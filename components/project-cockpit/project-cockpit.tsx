@@ -88,37 +88,60 @@ export function ProjectCockpit({
   const BREED_DEFAULT = 760;
   const [panelBreedte, setPanelBreedte] = useState(kaartCentrisch ? KAART_DEFAULT : BREED_DEFAULT);
   const splitRef = useRef<HTMLDivElement>(null);
+  const pwSleutel = `cockpit:pw:${activeStep}`;
 
+  // Kaart-zichtbaarheid auto-aanpassen per stap (eerste render overslaan).
   useEffect(() => {
     if (eersteRender.current) {
       eersteRender.current = false;
       return;
     }
     setKaartVerborgen(!kaartCentrisch);
-    setPanelBreedte(kaartCentrisch ? KAART_DEFAULT : BREED_DEFAULT);
   }, [kaartCentrisch, activeStep]);
 
-  const startSlepen = useCallback((e: ReactMouseEvent) => {
-    e.preventDefault();
-    const container = splitRef.current;
-    if (!container) return;
-    const links = container.getBoundingClientRect().left;
-    const breedte = container.getBoundingClientRect().width;
-    const onMove = (ev: MouseEvent) => {
-      const next = Math.min(breedte - 320, Math.max(280, ev.clientX - links));
-      setPanelBreedte(next);
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-  }, []);
+  // Paneelbreedte per stap laden uit localStorage (val terug op de stap-default).
+  useEffect(() => {
+    const def = kaartCentrisch ? KAART_DEFAULT : BREED_DEFAULT;
+    if (typeof window === 'undefined') {
+      setPanelBreedte(def);
+      return;
+    }
+    const opgeslagen = window.localStorage.getItem(pwSleutel);
+    const n = opgeslagen ? parseInt(opgeslagen, 10) : NaN;
+    setPanelBreedte(Number.isFinite(n) ? n : def);
+  }, [activeStep, kaartCentrisch, pwSleutel]);
+
+  const startSlepen = useCallback(
+    (e: ReactMouseEvent) => {
+      e.preventDefault();
+      const container = splitRef.current;
+      if (!container) return;
+      const links = container.getBoundingClientRect().left;
+      const breedte = container.getBoundingClientRect().width;
+      let laatste = panelBreedte;
+      const onMove = (ev: MouseEvent) => {
+        laatste = Math.min(breedte - 320, Math.max(280, ev.clientX - links));
+        setPanelBreedte(laatste);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+        // Voorkeur per stap onthouden.
+        try {
+          window.localStorage.setItem(pwSleutel, String(Math.round(laatste)));
+        } catch {
+          /* localStorage niet beschikbaar — voorkeur niet bewaard */
+        }
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    },
+    [panelBreedte, pwSleutel]
+  );
 
   const gaNaarStap = useCallback(
     (stap: ProjectProcessStepId) => {

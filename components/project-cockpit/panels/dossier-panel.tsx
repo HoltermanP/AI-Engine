@@ -116,7 +116,7 @@ export function DossierPanel() {
             ))}
           </TabsList>
           {typesMetItems.map((t) => (
-            <TabsContent key={t} value={t} className="space-y-1.5">
+            <TabsContent key={t} value={t} className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
               {grouped[t].map((item) => (
                 <Card key={item.id} className="flex items-center justify-between gap-2 p-2.5">
                   <div className="flex min-w-0 items-center gap-2">

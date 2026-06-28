@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { getFirstTraceIdAction } from '@/lib/actions/data';
 import { useProjectProcess } from '@/components/project-process-provider';
 import {
@@ -23,6 +23,7 @@ import {
   extractProjectIdFromPath,
   extractTraceIdFromPath,
   getProjectProcessStepHref,
+  resolveProjectProcessStep,
   PROJECT_PROCESS_STEPS,
 } from '@/lib/navigation/project-process';
 
@@ -129,6 +130,8 @@ function getInitials(name: string): string {
 
 function ProjectContextPanel({ projectId, pathname }: { projectId: string; pathname: string }) {
   const process = useProjectProcess();
+  const searchParams = useSearchParams();
+  const activeStep = resolveProjectProcessStep(searchParams.get('stap'));
   const [fetchedTraceId, setFetchedTraceId] = useState<string | null>(null);
   const isOnProject = pathname.startsWith('/project/') || pathname.startsWith('/rapportage/');
 
@@ -170,17 +173,10 @@ function ProjectContextPanel({ projectId, pathname }: { projectId: string; pathn
             projectId,
             step.id === 'trace' ? traceLinkId : undefined
           );
-          const active =
-            (step.id === 'overzicht' && pathname === `/project/${projectId}`) ||
-            (step.id === 'netontwerp' && pathname.includes('/netontwerp')) ||
-            (step.id === 'trace' && pathname.includes('/trace/')) ||
-            (step.id === 'bodem' && pathname.includes('/bodem')) ||
-            (step.id === 'planning' && pathname.includes('/planning')) ||
-            (step.id === 'dossier' && pathname.includes('/dossier')) ||
-            (step.id === 'rapportage' && pathname.startsWith(`/rapportage/${projectId}`));
+          const active = pathname.startsWith(`/project/${projectId}`) && step.id === activeStep;
 
           const Icon = step.icon;
-          const isCurrentPage = pathname === href || (step.id === 'trace' && active);
+          const isCurrentPage = active;
 
           const inner = (
             <>

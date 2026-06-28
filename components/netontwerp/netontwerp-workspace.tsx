@@ -14,11 +14,9 @@ import {
   getNetontwerpTracesAction,
 } from '@/lib/actions/netontwerp';
 import { demoTraceToMapTrace } from '@/lib/trace-edit';
-import { saveManualTraceAction } from '@/lib/actions/trace-routing';
 import { assetsNaarGeoJSON, aansluitingenNaarFeatures } from '@/lib/map/netontwerp-assets';
-import { MapWorkspace } from '@/components/map-workspace';
-import type { MapTrace } from '@/components/trace-map';
-import { getTraceLines, flattenTraceLines, type TraceLines } from '@/lib/trace-edit';
+import { useCockpit, useCockpitMap } from '@/components/project-cockpit/cockpit-context';
+import { getTraceLines, type TraceLines } from '@/lib/trace-edit';
 import { NetontwerpStappenNav } from './netontwerp-stappen-nav';
 import { AssetPalette, type PlaatsModus } from './asset-palette';
 import { StapBelastingen } from './stap-belastingen';
@@ -30,7 +28,6 @@ import { StapWerktekening } from './stap-werktekening';
 
 interface NetontwerpWorkspaceProps {
   initieleOntwerp: Netontwerp;
-  initieleTraces: MapTrace[];
 }
 
 const GELDIGE_STAPPEN: NetontwerpStap[] = [
@@ -44,18 +41,22 @@ const GELDIGE_STAPPEN: NetontwerpStap[] = [
 
 let plaatsTeller = 0;
 
-export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: NetontwerpWorkspaceProps) {
+/**
+ * Zijpaneel "Netontwerp" — belastingen, kabelkeuze, stations en assets. De kaart
+ * is de gedeelde cockpit-kaart; dit paneel publiceert de assets + plaatsmodus en
+ * deelt de tracé-geometrie via de cockpit-context. De substap staat in `?substap=`
+ * (de hoofdstap zit in `?stap=netontwerp`).
+ */
+export function NetontwerpWorkspace({ initieleOntwerp }: NetontwerpWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const stapParam = searchParams.get('stap') as NetontwerpStap | null;
+  const { traces, setTraces, selectedTraceId, setSelectedTraceId } = useCockpit();
+  const subParam = searchParams.get('substap') as NetontwerpStap | null;
   const actieveStap: NetontwerpStap =
-    stapParam && GELDIGE_STAPPEN.includes(stapParam) ? stapParam : 'belastingen';
+    subParam && GELDIGE_STAPPEN.includes(subParam) ? subParam : 'belastingen';
 
   const [ontwerp, setOntwerp] = useState(initieleOntwerp);
-  const [traces, setTraces] = useState(initieleTraces);
-  const [geselecteerdTraceId, setGeselecteerdTraceId] = useState<string | undefined>(
-    initieleOntwerp.traceIds[0] ?? initieleTraces[0]?.id,
-  );
+  const geselecteerdTraceId = selectedTraceId ?? initieleOntwerp.traceIds[0] ?? traces[0]?.id;
   const [plaatsModus, setPlaatsModus] = useState<PlaatsModus | null>(null);
   const [geselecteerdAssetId, setGeselecteerdAssetId] = useState<string | null>(null);
   const [opslagStatus, setOpslagStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -63,9 +64,12 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
   const setStap = useCallback(
     (stap: NetontwerpStap) => {
       setPlaatsModus(null);
-      router.replace(`?stap=${stap}`, { scroll: false });
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('stap', 'netontwerp');
+      params.set('substap', stap);
+      router.replace(`?${params.toString()}`, { scroll: false });
     },
-    [router],
+    [router, searchParams]
   );
 
   /* ── Sneltoetsen: Esc verlaat de plaatsmodus, Delete verwijdert selectie ── */
@@ -107,29 +111,6 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
       if (ontwerpSaveTimer.current) clearTimeout(ontwerpSaveTimer.current);
     };
   }, [ontwerp]);
-
-  /* ── Debounced opslag van tracégeometrie (stap 2) ─────────────────── */
-  const traceSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleTracesChange = useCallback(
-    (volgende: MapTrace[]) => {
-      setTraces(volgende);
-      if (!geselecteerdTraceId) return;
-      const trace = volgende.find((t) => t.id === geselecteerdTraceId);
-      if (!trace) return;
-      setOpslagStatus('saving');
-      if (traceSaveTimer.current) clearTimeout(traceSaveTimer.current);
-      traceSaveTimer.current = setTimeout(async () => {
-        const lines = getTraceLines(trace);
-        await saveManualTraceAction(
-          trace.id,
-          flattenTraceLines(lines),
-          lines as [number, number, number][][],
-        );
-        setOpslagStatus('saved');
-      }, 1200);
-    },
-    [geselecteerdTraceId],
-  );
 
   /* ── Asset-plaatsing via kaartklik ────────────────────────────────── */
   const traceLinesById = useMemo(() => {
@@ -215,9 +196,9 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
       const resultaat = await maakNieuwTraceAction(ontwerp, netvlak);
       setOntwerp(resultaat.ontwerp);
       setTraces((prev) => [demoTraceToMapTrace(resultaat.trace), ...prev]);
-      setGeselecteerdTraceId(resultaat.trace.id);
+      setSelectedTraceId(resultaat.trace.id);
     },
-    [ontwerp],
+    [ontwerp, setTraces, setSelectedTraceId],
   );
 
   /** Bulk-import (CSV): spreid de aansluitingen gelijkmatig langs het eerste tracé. */
@@ -236,7 +217,6 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
             const totaal = lijnLengteM(lijn);
             const punt = puntOpChainage(lijn, (totaal * (i + 1)) / (rijen.length + 1));
             if (punt) {
-              // 25 m loodrecht uit de as zodat de punten naast het tracé liggen
               x = punt.x - 25 * Math.sin(punt.richtingRad);
               y = punt.y + 25 * Math.cos(punt.richtingRad);
             }
@@ -257,16 +237,19 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
   );
 
   /** Na ringgeneratie: het nieuwe MS-tracé van de server ophalen en tonen. */
-  const handleRingTrace = useCallback(async (traceId: string) => {
-    const verse = await getNetontwerpTracesAction([traceId]);
-    if (verse.length) {
-      setTraces((prev) => [
-        ...verse.map(demoTraceToMapTrace),
-        ...prev.filter((t) => t.id !== traceId),
-      ]);
-      setGeselecteerdTraceId(traceId);
-    }
-  }, []);
+  const handleRingTrace = useCallback(
+    async (traceId: string) => {
+      const verse = await getNetontwerpTracesAction([traceId]);
+      if (verse.length) {
+        setTraces((prev) => [
+          ...verse.map(demoTraceToMapTrace),
+          ...prev.filter((t) => t.id !== traceId),
+        ]);
+        setSelectedTraceId(traceId);
+      }
+    },
+    [setTraces, setSelectedTraceId],
+  );
 
   const handleAssetClick = useCallback((assetId: string) => {
     setGeselecteerdAssetId((prev) => (prev === assetId ? null : assetId));
@@ -328,6 +311,21 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
   }, [ontwerp.assets, ontwerp.aansluitingen, traceLinesById]);
 
   const stappenStatus = useMemo(() => afgeleideStapStatus(ontwerp), [ontwerp]);
+  const kaartBewerkbaar = actieveStap === 'trace';
+
+  // Publiceer assets + plaatsmodus naar de gedeelde cockpit-kaart.
+  const mapConfig = useMemo(
+    () => ({
+      editable: kaartBewerkbaar,
+      defaultDrawMode: 'none' as const,
+      netontwerpAssets,
+      onAssetPlaats: plaatsModus ? handleAssetPlaats : undefined,
+      onAssetClick: handleAssetClick,
+      onAssetVerplaats: kaartBewerkbaar ? undefined : handleAssetVerplaats,
+    }),
+    [kaartBewerkbaar, netontwerpAssets, plaatsModus, handleAssetPlaats, handleAssetClick, handleAssetVerplaats]
+  );
+  useCockpitMap(mapConfig);
 
   const ringVolgorde = useMemo(() => {
     const msTrace = traces.find((t) => t.discipline === 'elektra_ms');
@@ -351,8 +349,6 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
           ? ['mof']
           : [];
 
-  const kaartBewerkbaar = actieveStap === 'trace';
-
   return (
     <div className="flex h-full flex-col">
       <NetontwerpStappenNav
@@ -361,93 +357,66 @@ export function NetontwerpWorkspace({ initieleOntwerp, initieleTraces }: Netontw
         stappenStatus={stappenStatus}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
-        {/* Kaart + palet */}
-        <div className="min-h-[320px] flex-1 xl:min-h-0">
-          <MapWorkspace
-            traces={traces}
-            onTracesChange={handleTracesChange}
-            selectedTraceId={geselecteerdTraceId}
-            editable={kaartBewerkbaar}
-            defaultDrawMode="none"
-            netontwerpAssets={netontwerpAssets}
-            onAssetPlaats={plaatsModus ? handleAssetPlaats : undefined}
-            onAssetClick={handleAssetClick}
-            onAssetVerplaats={kaartBewerkbaar ? undefined : handleAssetVerplaats}
-          />
-        </div>
-
-        {/* Stappaneel */}
-        <div className="w-full shrink-0 overflow-y-auto border-t border-border bg-background p-3 xl:w-[380px] xl:border-l xl:border-t-0">
-          {geselecteerdAsset && (
-            <div className="mb-3 rounded-lg border border-[#2D6FE8]/40 bg-[#2D6FE8]/5 p-3 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{geselecteerdAsset.naam}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {geselecteerdAsset.type} · {geselecteerdAsset.subtype} ·{' '}
-                    {geselecteerdAsset.bron}
-                    {geselecteerdAsset.positie.binding === 'chainage'
-                      ? ` · km ${(geselecteerdAsset.positie.chainageM / 1000).toFixed(3)}`
-                      : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={verwijderGeselecteerdAsset}
-                  className="shrink-0 rounded-md border border-destructive/40 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10"
-                >
-                  Verwijderen
-                </button>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {geselecteerdAsset && (
+          <div className="mb-3 rounded-lg border border-[#2D6FE8]/40 bg-[#2D6FE8]/5 p-3 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{geselecteerdAsset.naam}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {geselecteerdAsset.type} · {geselecteerdAsset.subtype} · {geselecteerdAsset.bron}
+                  {geselecteerdAsset.positie.binding === 'chainage'
+                    ? ` · km ${(geselecteerdAsset.positie.chainageM / 1000).toFixed(3)}`
+                    : ''}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={verwijderGeselecteerdAsset}
+                className="shrink-0 rounded-md border border-destructive/40 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10"
+              >
+                Verwijderen
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {toonPalet.length > 0 && (
-            <div className="mb-3 rounded-lg border border-border bg-card p-3">
-              <AssetPalette
-                plaatsModus={plaatsModus}
-                onPlaatsModusChange={setPlaatsModus}
-                toon={toonPalet}
-              />
-            </div>
-          )}
+        {toonPalet.length > 0 && (
+          <div className="mb-3 rounded-lg border border-border bg-card p-3">
+            <AssetPalette plaatsModus={plaatsModus} onPlaatsModusChange={setPlaatsModus} toon={toonPalet} />
+          </div>
+        )}
 
-          {actieveStap === 'belastingen' && (
-            <StapBelastingen
-              ontwerp={ontwerp}
-              onOntwerpChange={setOntwerp}
-              onBulkImport={handleBulkImport}
-            />
-          )}
-          {actieveStap === 'trace' && (
-            <StapTrace
-              ontwerp={ontwerp}
-              traces={traces}
-              geselecteerdTraceId={geselecteerdTraceId}
-              onSelecteerTrace={setGeselecteerdTraceId}
-              onNieuwTrace={handleNieuwTrace}
-              opslagStatus={opslagStatus}
-            />
-          )}
-          {actieveStap === 'kabel' && (
-            <StapKabel ontwerp={ontwerp} traces={traces} onOntwerpChange={setOntwerp} />
-          )}
-          {actieveStap === 'stations' && (
-            <StapStations
-              ontwerp={ontwerp}
-              onOntwerpChange={setOntwerp}
-              ringVolgorde={ringVolgorde}
-              onRingTrace={handleRingTrace}
-            />
-          )}
-          {actieveStap === 'stationsontwerp' && (
-            <StapStationsontwerp ontwerp={ontwerp} onOntwerpChange={setOntwerp} />
-          )}
-          {actieveStap === 'werktekening' && (
-            <StapWerktekening ontwerp={ontwerp} onOntwerpChange={setOntwerp} />
-          )}
-        </div>
+        {actieveStap === 'belastingen' && (
+          <StapBelastingen ontwerp={ontwerp} onOntwerpChange={setOntwerp} onBulkImport={handleBulkImport} />
+        )}
+        {actieveStap === 'trace' && (
+          <StapTrace
+            ontwerp={ontwerp}
+            traces={traces}
+            geselecteerdTraceId={geselecteerdTraceId}
+            onSelecteerTrace={setSelectedTraceId}
+            onNieuwTrace={handleNieuwTrace}
+            opslagStatus={opslagStatus}
+          />
+        )}
+        {actieveStap === 'kabel' && (
+          <StapKabel ontwerp={ontwerp} traces={traces} onOntwerpChange={setOntwerp} />
+        )}
+        {actieveStap === 'stations' && (
+          <StapStations
+            ontwerp={ontwerp}
+            onOntwerpChange={setOntwerp}
+            ringVolgorde={ringVolgorde}
+            onRingTrace={handleRingTrace}
+          />
+        )}
+        {actieveStap === 'stationsontwerp' && (
+          <StapStationsontwerp ontwerp={ontwerp} onOntwerpChange={setOntwerp} />
+        )}
+        {actieveStap === 'werktekening' && (
+          <StapWerktekening ontwerp={ontwerp} onOntwerpChange={setOntwerp} />
+        )}
       </div>
     </div>
   );

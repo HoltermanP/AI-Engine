@@ -212,6 +212,8 @@ interface TraceMapProps {
   multiLineMode?: boolean;
   drawMode?: DrawMode;
   autoWaypoints?: { x: number; y: number }[];
+  /** Bodem-vooronderzoek WBB-signalen als GeoJSON (WGS84/4326) — eigen laag op de kaart. */
+  bodemSignalen?: GeoJSON.FeatureCollection;
   routeAlternatives?: {
     id: string;
     label: string;
@@ -741,6 +743,7 @@ export function TraceMap({
   bematingen = [],
   bematingPunten = [],
   netontwerpAssets,
+  bodemSignalen,
   plaatsModusActief = false,
   onAssetClick,
   onAssetVerplaats,
@@ -1225,6 +1228,44 @@ export function TraceMap({
     map.on('click', 'netontwerp-assets-circle', onAssetLayerClick);
     map.on('click', 'netontwerp-mantelbuis-line', onAssetLayerClick);
   }, [netontwerpAssets, mapReady]);
+
+  // Bodem-vooronderzoek: WBB-signalen (4326 GeoJSON) als fill + omtrek.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!styleKlaar(map)) return;
+
+    const data: GeoJSON.FeatureCollection = bodemSignalen ?? {
+      type: 'FeatureCollection',
+      features: [],
+    };
+
+    const bron = map.getSource('bodem-wbb-source') as
+      | { setData: (d: GeoJSON.FeatureCollection) => void }
+      | undefined;
+    if (bron) {
+      bron.setData(data);
+      return;
+    }
+    if (data.features.length === 0) return;
+
+    map.addSource('bodem-wbb-source', { type: 'geojson', data });
+    map.addLayer({
+      id: 'bodem-wbb-fill',
+      type: 'fill',
+      source: 'bodem-wbb-source',
+      paint: {
+        // Kleur op ernst: 'verontreinig' in statusOordeel = kritisch (rood), anders let-op (oranje).
+        'fill-color': [
+          'case',
+          ['in', 'verontreinig', ['downcase', ['coalesce', ['get', 'statusOordeel'], '']]],
+          '#C0392B',
+          '#E67E22',
+        ],
+        'fill-opacity': 0.4,
+        'fill-outline-color': '#5d2c26',
+      },
+    });
+  }, [bodemSignalen, mapReady]);
 
   // ── CAD-tekengereedschap: rubber band, OSNAP-marker, maatinvoer, meetlijn ──
   useEffect(() => {

@@ -1,22 +1,27 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   FolderKanban,
-  Network,
   GitBranch,
   Mountain,
+  Network,
+  Wrench,
   CalendarDays,
   FolderOpen,
-  FileBarChart,
 } from 'lucide-react';
 
+/**
+ * Processtappen van het project, in engineering-logische volgorde. Sinds de
+ * cockpit-herstructurering is elke stap een query (`?stap=`) binnen één route
+ * `/project/[id]`, zodat de kaart gemount blijft tijdens het doorlopen.
+ */
 export type ProjectProcessStepId =
-  | 'overzicht'
-  | 'netontwerp'
+  | 'intake'
   | 'trace'
   | 'bodem'
+  | 'netontwerp'
+  | 'engineering'
   | 'planning'
-  | 'dossier'
-  | 'rapportage';
+  | 'dossier';
 
 export interface ProjectProcessStep {
   id: ProjectProcessStepId;
@@ -28,85 +33,86 @@ export interface ProjectProcessStep {
   href: (projectId: string, traceId?: string) => string;
 }
 
-/** Projectniveau: van overzicht tot rapportage. Tracé-engineering heeft eigen 5 fases. */
+function stapHref(projectId: string, stap: ProjectProcessStepId, traceId?: string): string {
+  const params = new URLSearchParams({ stap });
+  if (traceId) params.set('traceId', traceId);
+  return `/project/${projectId}?${params.toString()}`;
+}
+
 export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
   {
-    id: 'overzicht',
+    id: 'intake',
     nummer: 1,
     label: 'Stap 1',
-    titel: 'Projectoverzicht',
-    beschrijving: 'Tracés, voortgang en open acties bekijken',
+    titel: 'Start',
+    beschrijving: 'Projectoverzicht, tracés en voortgang',
     icon: FolderKanban,
-    href: (projectId) => `/project/${projectId}`,
-  },
-  {
-    id: 'netontwerp',
-    nummer: 2,
-    label: 'Stap 2',
-    titel: 'Netontwerp',
-    beschrijving: 'Belastingen, kabelkeuze, stations en werktekening (elektra LS/MS)',
-    icon: Network,
-    href: (projectId) => `/project/${projectId}/netontwerp`,
+    href: (p) => stapHref(p, 'intake'),
   },
   {
     id: 'trace',
-    nummer: 3,
-    label: 'Stap 3',
-    titel: 'Tracé-engineering',
-    beschrijving: 'Ontwerp, data, engineering, omgeving en dossier per tracé',
+    nummer: 2,
+    label: 'Stap 2',
+    titel: 'Tracé tekenen',
+    beschrijving: 'Tracé op de GIS-kaart tekenen en routeren',
     icon: GitBranch,
-    href: (projectId, traceId) =>
-      traceId
-        ? `/project/${projectId}/trace/${traceId}`
-        : `/project/${projectId}/trace`,
+    href: (p, t) => stapHref(p, 'trace', t),
   },
   {
     id: 'bodem',
+    nummer: 3,
+    label: 'Stap 3',
+    titel: 'Bodem & omgeving',
+    beschrijving: 'Bodemvooronderzoek en omgevingssignalen (NEN 5725)',
+    icon: Mountain,
+    href: (p) => stapHref(p, 'bodem'),
+  },
+  {
+    id: 'netontwerp',
     nummer: 4,
     label: 'Stap 4',
-    titel: 'Bodemvooronderzoek',
-    beschrijving: 'Open bodemdata aggregeren en signaleren (NEN 5725-assistent)',
-    icon: Mountain,
-    href: (projectId) => `/project/${projectId}/bodem`,
+    titel: 'Netontwerp',
+    beschrijving: 'Belastingen, kabelkeuze, stations en assets',
+    icon: Network,
+    href: (p) => stapHref(p, 'netontwerp'),
+  },
+  {
+    id: 'engineering',
+    nummer: 5,
+    label: 'Stap 5',
+    titel: 'Engineering & toetsing',
+    beschrijving: 'Conflictdetectie, berekeningen, tekeningen en bemating',
+    icon: Wrench,
+    href: (p) => stapHref(p, 'engineering'),
   },
   {
     id: 'planning',
-    nummer: 5,
-    label: 'Stap 5',
+    nummer: 6,
+    label: 'Stap 6',
     titel: 'Planning',
     beschrijving: 'Activiteiten, milestones en Gantt-overzicht',
     icon: CalendarDays,
-    href: (projectId) => `/project/${projectId}/planning`,
+    href: (p) => stapHref(p, 'planning'),
   },
   {
     id: 'dossier',
-    nummer: 6,
-    label: 'Stap 6',
-    titel: 'Dossier',
-    beschrijving: 'Documenten, tekeningen en rapporten bundelen',
-    icon: FolderOpen,
-    href: (projectId) => `/project/${projectId}/dossier`,
-  },
-  {
-    id: 'rapportage',
     nummer: 7,
     label: 'Stap 7',
-    titel: 'Rapportage',
-    beschrijving: 'Projectstatus en inzichten delen',
-    icon: FileBarChart,
-    href: (projectId) => `/rapportage/${projectId}`,
+    titel: 'Dossier',
+    beschrijving: 'Documenten, tekeningen, rapporten en startbesluit',
+    icon: FolderOpen,
+    href: (p) => stapHref(p, 'dossier'),
   },
 ];
 
-export function resolveProjectProcessStep(pathname: string): ProjectProcessStepId {
-  if (pathname.includes('/netontwerp')) return 'netontwerp';
-  if (pathname.includes('/trace/')) return 'trace';
-  if (pathname.includes('/bodem')) return 'bodem';
-  if (pathname.includes('/planning')) return 'planning';
-  if (pathname.includes('/dossier')) return 'dossier';
-  if (pathname.startsWith('/rapportage/')) return 'rapportage';
-  if (pathname.startsWith('/project/')) return 'overzicht';
-  return 'overzicht';
+export const PROJECT_PROCESS_STEP_IDS = PROJECT_PROCESS_STEPS.map((s) => s.id);
+
+/** Bepaalt de actieve stap uit de `stap`-query (met fallback op intake). */
+export function resolveProjectProcessStep(stap?: string | null): ProjectProcessStepId {
+  if (stap && (PROJECT_PROCESS_STEP_IDS as string[]).includes(stap)) {
+    return stap as ProjectProcessStepId;
+  }
+  return 'intake';
 }
 
 export function extractProjectIdFromPath(pathname: string): string | null {
@@ -116,6 +122,7 @@ export function extractProjectIdFromPath(pathname: string): string | null {
   return rapportMatch?.[1] ?? null;
 }
 
+/** Tracé-id uit de oude pad-vorm (`/trace/[id]`); cockpit gebruikt `?traceId=`. */
 export function extractTraceIdFromPath(pathname: string): string | null {
   const match = pathname.match(/\/project\/[^/]+\/trace\/([^/]+)/);
   return match?.[1] ?? null;

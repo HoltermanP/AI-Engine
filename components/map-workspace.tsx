@@ -53,6 +53,8 @@ interface MapWorkspaceProps {
   }[];
   /** Netontwerp-assets op de kaart (stations/moffen/mantelbuizen) */
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
+  /** Bodem-vooronderzoek WBB-signalen (4326 GeoJSON) als laag op de kaart. */
+  bodemSignalen?: GeoJSON.FeatureCollection;
   /** Plaatsmodus: kaartklik plaatst een asset (RD-coördinaten) i.p.v. tracé-bewerking */
   onAssetPlaats?: (x: number, y: number) => void;
   onAssetClick?: (assetId: string) => void;
@@ -157,6 +159,7 @@ export function MapWorkspace({
   onLayerDataChange,
   routeAlternatives = [],
   netontwerpAssets,
+  bodemSignalen,
   onAssetPlaats,
   onAssetClick,
   onAssetVerplaats,
@@ -611,6 +614,7 @@ export function MapWorkspace({
           bematingen={traces.find((t) => t.id === selectedTraceId)?.bematingen}
           bematingPunten={bematingPunten}
           netontwerpAssets={netontwerpAssets}
+          bodemSignalen={bodemSignalen}
           plaatsModusActief={Boolean(onAssetPlaats)}
           onAssetClick={onAssetClick}
           onAssetVerplaats={onAssetVerplaats}

@@ -75,6 +75,9 @@ export function genereerUitgangspuntennotitie(input: UitgangspuntenInput): Uitga
         )
       : ['| _Geen kruisingen in het huidige tracé_ | — | — | — |'];
 
+  const zroSectie = bouwZroSectie(routing);
+  const handmatigSectie = bouwHandmatigSectie(routing);
+
   const md = `# Uitgangspuntennotitie — ${input.traceNaam}
 
 | | |
@@ -121,7 +124,7 @@ ${
       }.`
     : 'Het tracé kent in het huidige ontwerp geen sleufloze passages.'
 }
-
+${zroSectie}${handmatigSectie}
 ## 4. Aannames
 - KLIC-/WIBON-gebiedsinformatie is indicatief; werkelijke ligging te verifiëren met proefsleuven (${NORMEN.crow500.code}).
 - Grondopbouw op basis van BRO/GeoTOP en beschikbare sonderingen; aanvullend grondonderzoek in DO-fase.
@@ -137,6 +140,75 @@ Deze uitgangspunten worden bevroren bij vaststelling van het VO en dienen als ba
     titel: `Uitgangspuntennotitie ${input.traceCode}`,
     markdown: md,
   };
+}
+
+const ZRO_STATUS_LABELS: Record<string, string> = {
+  zakelijk_recht_vereist: 'Zakelijk recht vereist',
+  gedoogplicht: 'Gedoogplicht',
+  publiek: 'Publiek',
+  eigenaar_onbekend: 'Eigenaar onbekend',
+};
+
+const ZRO_EIGENAAR_LABELS: Record<string, string> = {
+  particulier: 'Particulier',
+  bedrijf: 'Bedrijf',
+  gemeente: 'Gemeente',
+  overheid: 'Overheid',
+  onbekend: 'Onbekend',
+};
+
+/** Sectie 3.4 — zakelijk-recht-overzicht (ZRO) over doorkruiste particuliere percelen. */
+function bouwZroSectie(routing?: TraceRoutingResult | null): string {
+  const zro = routing?.zroOverzicht;
+  if (!zro || zro.percelen.length === 0) return '';
+  const rijen = zro.percelen
+    .map(
+      (p) =>
+        `| ${p.perceelnummer} | ${ZRO_EIGENAAR_LABELS[p.eigenaarType] ?? p.eigenaarType} | ${p.lengteDoorPerceelM} | ${
+          ZRO_STATUS_LABELS[p.status] ?? p.status
+        } |`
+    )
+    .join('\n');
+  const bronregel =
+    zro.bron === 'live'
+      ? 'Eigenaargegevens uit BRK Inzage.'
+      : 'Eigenaargegevens indicatief (geen live BRK-koppeling) — verifiëren bij Kadaster vóór vestiging zakelijk recht.';
+  return `
+### 3.4 Zakelijk recht (ZRO-overzicht)
+Het tracé doorkruist ${zro.percelen.length} particulier(e) perceel/percelen over in totaal **${zro.totaalPrivaatM} m**. Voor deze percelen is een zakelijk recht (opstalrecht) of gedoogplicht te regelen met de rechthebbende.
+
+| Perceel | Eigenaar | Lengte (m) | Status |
+|---|---|---|---|
+${rijen}
+
+_${bronregel}_
+`;
+}
+
+/** Sectie 3.5 — best-effort segmenten die handmatig opgelost moeten worden. */
+function bouwHandmatigSectie(routing?: TraceRoutingResult | null): string {
+  if (!routing?.heeftHandmatigOpTeLossen) return '';
+  const probleem = (routing.markedSegments ?? []).filter((m) => m.marker !== 'ok');
+  const regels =
+    probleem.length > 0
+      ? probleem
+          .map((m) => {
+            const wat =
+              m.marker === 'door_bebouwing'
+                ? 'Loopt door bebouwing'
+                : `Loopt door particulier perceel${m.toelichting ? ` (${m.toelichting})` : ''}`;
+            return `| ${wat} | ${m.lengteM} |`;
+          })
+          .join('\n')
+      : '| _Geen detail beschikbaar_ | — |';
+  return `
+### 3.5 Handmatig op te lossen segmenten
+Voor dit tracé is geen volledig bebouwingsvrije route langs wegen gevonden (best-effort tracé). De onderstaande delen lopen door bebouwing of particulier terrein en moeten handmatig worden verlegd of nader afgestemd vóór vaststelling.
+
+| Aandachtspunt | Lengte (m) |
+|---|---|
+${regels}
+`;
 }
 
 function labelLegtechniek(l: string): string {

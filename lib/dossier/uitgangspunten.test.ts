@@ -91,4 +91,57 @@ describe('uitgangspuntennotitie', () => {
     expect(kaal.markdown).toContain('Geen kruisingen');
     expect(kaal.docCode).toBe('P1-VO-NOT-001-v1.0');
   });
+
+  it('neemt het ZRO-overzicht (sectie 3.4) op bij doorkruiste particuliere percelen', () => {
+    const metZro = genereerUitgangspuntennotitie({
+      projectNaam: 'P',
+      projectCode: 'P1',
+      traceNaam: 'T',
+      traceCode: 'TR-1',
+      discipline: 'elektra_ls',
+      vereisteDekkingM: 0.6,
+      datum: '2026-06-09',
+      routing: {
+        ...routing,
+        zroOverzicht: {
+          percelen: [
+            {
+              perceelnummer: 'A 101',
+              eigenaarType: 'particulier',
+              lengteDoorPerceelM: 42,
+              segmentVolgorde: [1],
+              status: 'zakelijk_recht_vereist',
+            },
+          ],
+          totaalPrivaatM: 42,
+          bron: 'demo',
+        },
+      },
+    });
+    expect(metZro.markdown).toContain('3.4 Zakelijk recht');
+    expect(metZro.markdown).toContain('A 101');
+    expect(metZro.markdown).toContain('Zakelijk recht vereist');
+  });
+
+  it('neemt de handmatig-op-te-lossen sectie (3.5) op bij een best-effort tracé', () => {
+    const metHandmatig = genereerUitgangspuntennotitie({
+      projectNaam: 'P',
+      projectCode: 'P1',
+      traceNaam: 'T',
+      traceCode: 'TR-1',
+      discipline: 'elektra_ls',
+      vereisteDekkingM: 0.6,
+      datum: '2026-06-09',
+      routing: {
+        ...routing,
+        heeftHandmatigOpTeLossen: true,
+        markedSegments: [
+          { marker: 'door_bebouwing', coordinates: [], lengteM: 35 },
+          { marker: 'ok', coordinates: [], lengteM: 200 },
+        ],
+      },
+    });
+    expect(metHandmatig.markdown).toContain('3.5 Handmatig op te lossen');
+    expect(metHandmatig.markdown).toContain('Loopt door bebouwing');
+  });
 });

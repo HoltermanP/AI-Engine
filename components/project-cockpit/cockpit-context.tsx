@@ -37,6 +37,10 @@ export interface CockpitMapConfig {
     traceLines: [number, number, number][][];
     selected: boolean;
   }[];
+  markedSegments?: {
+    marker: 'ok' | 'door_bebouwing' | 'door_privaat';
+    coordinates: [number, number, number][];
+  }[];
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   onAssetPlaats?: (x: number, y: number) => void;
   onAssetClick?: (assetId: string) => void;

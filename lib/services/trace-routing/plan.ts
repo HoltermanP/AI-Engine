@@ -28,15 +28,22 @@ import {
   type RouteCostProfile,
 } from './road-graph';
 import { buildRoutingContext } from './context';
+import { computeZroOverzicht } from './zro';
 import type {
+  MarkedSegment,
   RouteCrossing,
   RouteSegmentAnalysis,
   RoutingContext,
+  SegmentMarker,
   TraceRouteAlternative,
   TraceRoutingInput,
   TraceRoutingResult,
   TraceWaypoint,
 } from './types';
+
+const PANDDEKKING_WAARSCHUWING =
+  'Panddekking onzeker (PDOK-data afgekapt) — tracé is niet gegarandeerd vrij van ' +
+  'bebouwing; handmatige controle vereist';
 
 const MAX_ALTERNATIVES = 3;
 
@@ -906,6 +913,16 @@ function buildSingleRoute(
 
   if (!traceLines.some((line) => line.length >= 2)) return null;
 
+  // Eindgeometrie-hervalidatie: de daadwerkelijk opgeslagen lijnen (na gladde
+  // route, offset én densificatie) mogen nooit door bebouwing lopen. De strikte
+  // bouwer faalt liever dan stilzwijgend te kruisen — de best-effort bouwer vangt
+  // deze gevallen op met expliciete markering.
+  for (const line of traceLines) {
+    if (routeCrossesBuildings(line.map(([x, y]) => [x, y]), ctx.pandPolygonen)) {
+      return null;
+    }
+  }
+
   const coordinates = traceLines.flat();
   const totaleLengteM = Math.round(traceLengthM(coordinates, traceLines));
   const score =
@@ -914,6 +931,9 @@ function buildSingleRoute(
       : 0;
 
   addPathPenalties(edgePenalty, allEdgeKeys, 5);
+
+  // Bij onzekere panddekking is een schone route niet hard te garanderen
+  if (ctx.panddekkingOnzeker) waarschuwingen.push(PANDDEKKING_WAARSCHUWING);
 
   return {
     id: spec.id,
@@ -926,6 +946,378 @@ function buildSingleRoute(
     score,
     waarschuwingen,
     blokkades,
+    panddekkingOnzeker: ctx.panddekkingOnzeker,
+    zroOverzicht: computeZroOverzicht(traceLines, ctx),
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Best-effort routering: alleen wanneer er géén bebouwingsvrije wegroute bestaat.
+// Levert wél een tracé maar markeert expliciet de delen door bebouwing/privaat
+// als "handmatig oplossen" — niet stil falen, niet stil kruisen.
+// ----------------------------------------------------------------------------
+
+/** Marge die rond bebouwing wordt aangehouden bij een lokale omleiding. */
+const OMLEIDING_MARGE_M = 1.5;
+
+const MARKER_PRIORITEIT: Record<SegmentMarker, number> = {
+  door_bebouwing: 2,
+  door_privaat: 1,
+  ok: 0,
+};
+
+function ergsteMarker(segments: MarkedSegment[]): SegmentMarker {
+  let worst: SegmentMarker = 'ok';
+  for (const s of segments) {
+    if (MARKER_PRIORITEIT[s.marker] > MARKER_PRIORITEIT[worst]) worst = s.marker;
+  }
+  return worst;
+}
+
+function markerLabel(marker: SegmentMarker): string {
+  if (marker === 'door_bebouwing') return 'loopt door bebouwing';
+  if (marker === 'door_privaat') return 'loopt door particulier perceel';
+  return 'vrije ligging';
+}
+
+/** Classificeer één subsegment: bebouwing > particulier perceel > vrij. */
+function classificeerSub(
+  a: [number, number],
+  b: [number, number],
+  ctx: RoutingContext
+): { marker: SegmentMarker; toelichting?: string } {
+  for (const pand of ctx.pandPolygonen) {
+    if (segmentIntersectsPolygon(a[0], a[1], b[0], b[1], pand)) {
+      return { marker: 'door_bebouwing', toelichting: 'bebouwing' };
+    }
+  }
+  const mx = (a[0] + b[0]) / 2;
+  const my = (a[1] + b[1]) / 2;
+  for (const perceel of ctx.percelen) {
+    if (!perceel.publiek && pointInPolygon(mx, my, perceel.polygon)) {
+      return { marker: 'door_privaat', toelichting: perceel.perceelnummer };
+    }
+  }
+  return { marker: 'ok' };
+}
+
+/**
+ * Deel de (gedensificeerde) geometrie op in aaneengesloten runs met dezelfde
+ * markering. Elke run wordt een {@link MarkedSegment} met 3D-coördinaten.
+ */
+function markGeometry(
+  line2d: [number, number][],
+  ctx: RoutingContext,
+  diepteNap: number
+): MarkedSegment[] {
+  const pts = densifyLine(line2d);
+  if (pts.length < 2) return [];
+  const subMarkers: { marker: SegmentMarker; toelichting?: string }[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    subMarkers.push(classificeerSub(pts[i - 1], pts[i], ctx));
+  }
+
+  const buildRun = (segStart: number, segEnd: number): MarkedSegment => {
+    const coords = pts.slice(segStart, segEnd + 1);
+    let lengteM = 0;
+    for (let i = 1; i < coords.length; i++) lengteM += dist(coords[i - 1], coords[i]);
+    const toelichting = subMarkers
+      .slice(segStart, segEnd)
+      .map((m) => m.toelichting)
+      .find(Boolean);
+    return {
+      marker: subMarkers[segStart].marker,
+      coordinates: coords.map(([x, y]) => [x, y, diepteNap] as [number, number, number]),
+      lengteM: Math.round(lengteM),
+      toelichting,
+    };
+  };
+
+  const runs: MarkedSegment[] = [];
+  let runStart = 0;
+  for (let i = 1; i < subMarkers.length; i++) {
+    if (subMarkers[i].marker !== subMarkers[runStart].marker) {
+      runs.push(buildRun(runStart, i));
+      runStart = i;
+    }
+  }
+  runs.push(buildRun(runStart, subMarkers.length));
+  return runs;
+}
+
+function segmentRaaktPand(
+  a: [number, number],
+  b: [number, number],
+  pandPolygonen: [number, number][][]
+): boolean {
+  for (const pand of pandPolygonen) {
+    if (segmentIntersectsPolygon(a[0], a[1], b[0], b[1], pand)) return true;
+  }
+  return false;
+}
+
+function polygonCentroid(poly: [number, number][]): [number, number] {
+  let sx = 0;
+  let sy = 0;
+  for (const [x, y] of poly) {
+    sx += x;
+    sy += y;
+  }
+  return [sx / poly.length, sy / poly.length];
+}
+
+/** Hoekpunt naar buiten verschoven (weg van het zwaartepunt) met een veiligheidsmarge. */
+function gebufferdeHoek(
+  hoek: [number, number],
+  centroid: [number, number],
+  marge: number
+): [number, number] {
+  const dx = hoek[0] - centroid[0];
+  const dy = hoek[1] - centroid[1];
+  const len = Math.hypot(dx, dy) || 1;
+  return [hoek[0] + (dx / len) * marge, hoek[1] + (dy / len) * marge];
+}
+
+function pandBboxArr(p: [number, number][]): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of p) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  return [minX, minY, maxX, maxY];
+}
+
+/** Panden waarvan de bbox binnen `marge` van het segment-bbox ligt. */
+function pandenNabijSegment(
+  a: [number, number],
+  b: [number, number],
+  panden: [number, number][][],
+  marge = 40
+): [number, number][][] {
+  const sMinX = Math.min(a[0], b[0]) - marge;
+  const sMaxX = Math.max(a[0], b[0]) + marge;
+  const sMinY = Math.min(a[1], b[1]) - marge;
+  const sMaxY = Math.max(a[1], b[1]) + marge;
+  const out: [number, number][][] = [];
+  for (const p of panden) {
+    const [minX, minY, maxX, maxY] = pandBboxArr(p);
+    if (maxX < sMinX || minX > sMaxX || maxY < sMinY || minY > sMaxY) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/** Naar buiten gebufferde rand van een pand (sluitend dubbelpunt verwijderd). */
+function gebufferdeRand(pand: [number, number][], marge: number): [number, number][] {
+  const ring = pand.slice();
+  if (
+    ring.length > 1 &&
+    ring[0][0] === ring[ring.length - 1][0] &&
+    ring[0][1] === ring[ring.length - 1][1]
+  ) {
+    ring.pop();
+  }
+  const c = polygonCentroid(ring);
+  return ring.map((v) => gebufferdeHoek(v, c, marge));
+}
+
+/**
+ * Omleiding rond één pand: loopt langs de gebufferde rand (beide richtingen,
+ * elk startpunt) en kiest de kortste route a→rand→b die geen enkel nabij pand
+ * raakt. Geeft de tussenpunten terug (zonder a/b) of null als er geen
+ * bebouwingsvrije omweg bestaat.
+ */
+function detourRondPand(
+  a: [number, number],
+  b: [number, number],
+  ring: [number, number][],
+  nabijePanden: [number, number][][]
+): [number, number][] | null {
+  const n = ring.length;
+  if (n < 3) return null;
+  const vrij = (p1: [number, number], p2: [number, number]) =>
+    !segmentRaaktPand(p1, p2, nabijePanden);
+
+  let beste: { punten: [number, number][]; len: number } | null = null;
+  for (const dir of [1, -1]) {
+    for (let i = 0; i < n; i++) {
+      if (!vrij(a, ring[i])) continue;
+      const seq: [number, number][] = [];
+      for (let k = 0; k < n; k++) {
+        const idx = (((i + dir * k) % n) + n) % n;
+        const v = ring[idx];
+        if (seq.length && !vrij(seq[seq.length - 1], v)) break;
+        seq.push(v);
+        if (vrij(v, b)) {
+          let len = dist(a, seq[0]);
+          for (let s = 1; s < seq.length; s++) len += dist(seq[s - 1], seq[s]);
+          len += dist(seq[seq.length - 1], b);
+          if (!beste || len < beste.len) beste = { punten: seq.slice(), len };
+          break; // kortste uitgang voor deze ingang/richting
+        }
+      }
+    }
+  }
+  return beste?.punten ?? null;
+}
+
+/**
+ * Leidt een lijn lokaal om blokkerende panden heen (langs de pandrand). Per
+ * kruisend segment wordt het eerste blokkerende pand omzeild; lukt dat niet
+ * bebouwingsvrij, dan blijft het segment staan (en wordt later gemarkeerd).
+ */
+function omleidPanden(
+  line2d: [number, number][],
+  pandPolygonen: [number, number][][]
+): [number, number][] {
+  if (line2d.length < 2 || pandPolygonen.length === 0) return line2d;
+  const out: [number, number][] = [line2d[0]];
+
+  for (let i = 1; i < line2d.length; i++) {
+    const a = out[out.length - 1];
+    const b = line2d[i];
+    if (!segmentRaaktPand(a, b, pandPolygonen)) {
+      out.push(b);
+      continue;
+    }
+
+    const nabije = pandenNabijSegment(a, b, pandPolygonen);
+    const blok = nabije.find((p) => segmentIntersectsPolygon(a[0], a[1], b[0], b[1], p));
+    if (!blok) {
+      out.push(b);
+      continue;
+    }
+
+    const ring = gebufferdeRand(blok, OMLEIDING_MARGE_M);
+    const detour = detourRondPand(a, b, ring, nabije);
+    if (detour) out.push(...detour);
+    out.push(b);
+  }
+
+  return out;
+}
+
+function routeBestEffortSegment(
+  graph: RoadGraph,
+  ctx: RoutingContext,
+  from: TraceWaypoint,
+  to: TraceWaypoint,
+  astarOptions: AStarOptions
+): { centerline: [number, number][]; roadNaam: string; fallback: boolean } {
+  const snapDist = snapDistanceForWaypoints(from, to);
+  const startNode = resolveWaypointNode(graph, from.x, from.y, snapDist);
+  const goalNode = resolveWaypointNode(graph, to.x, to.y, snapDist);
+  if (startNode !== null && goalNode !== null) {
+    const path = aStar(graph, startNode, goalNode, ctx, astarOptions);
+    if (path && path.length >= 2) {
+      const built = buildRouteFromPath(graph, path, false, ctx);
+      if (built.centerline.length >= 2) {
+        return { centerline: built.centerline, roadNaam: built.roadNaam, fallback: false };
+      }
+    }
+  }
+  // Geen wegverbinding: directe lijn als laatste redmiddel (wordt gemarkeerd)
+  return {
+    centerline: [
+      [from.x, from.y],
+      [to.x, to.y],
+    ],
+    roadNaam: 'Directe lijn',
+    fallback: true,
+  };
+}
+
+/**
+ * Best-effort tracé: leunt op de bestaande router maar staat bebouwing toe met
+ * een enorme straf, omzeilt panden lokaal waar mogelijk en markeert de rest.
+ */
+function buildBestEffortRoute(
+  graph: RoadGraph,
+  ctx: RoutingContext,
+  input: TraceRoutingInput
+): TraceRouteAlternative | null {
+  const { waypoints } = input;
+  const astarOptions: AStarOptions = { profile: 'avoid_private', allowPandTraversal: true };
+
+  const traceLines: [number, number, number][][] = [];
+  const segmenten: RouteSegmentAnalysis[] = [];
+  const markedSegments: MarkedSegment[] = [];
+  let wegBereikt = 0;
+
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const { centerline, roadNaam, fallback } = routeBestEffortSegment(
+      graph,
+      ctx,
+      waypoints[i],
+      waypoints[i + 1],
+      astarOptions
+    );
+    if (centerline.length < 2) continue;
+    if (!fallback) wegBereikt++;
+
+    const omgeleid = omleidPanden(centerline, ctx.pandPolygonen);
+    const marked = markGeometry(omgeleid, ctx, ctx.diepteNap);
+    markedSegments.push(...marked);
+
+    const line3d = densifyLine(omgeleid).map(
+      ([x, y]) => [x, y, ctx.diepteNap] as [number, number, number]
+    );
+    if (line3d.length >= 2) traceLines.push(line3d);
+
+    const segment = analyseSegment(omgeleid, roadNaam, ctx, i + 1, fallback);
+    const worst = ergsteMarker(marked);
+    segment.marker = worst;
+    segment.handmatigOplossen = worst !== 'ok';
+    segmenten.push(segment);
+  }
+
+  // Geen enkel segment bereikte het wegennet (waypoints te ver van wegen):
+  // dat is een invoerprobleem, geen bebouwingsblokkade — laat de aanroeper
+  // een nette "geen route"-melding tonen i.p.v. een kale rechte lijn.
+  if (wegBereikt === 0) return null;
+  if (!traceLines.some((line) => line.length >= 2)) return null;
+
+  const coordinates = traceLines.flat();
+  const totaleLengteM = Math.round(traceLengthM(coordinates, traceLines));
+  const score =
+    segmenten.length > 0
+      ? Math.round(segmenten.reduce((s, seg) => s + seg.score, 0) / segmenten.length)
+      : 0;
+
+  const probleemRuns = markedSegments.filter((m) => m.marker !== 'ok');
+  const waarschuwingen: string[] = [
+    'Geen volledig bebouwingsvrije route langs wegen gevonden — best-effort tracé; ' +
+      'de gemarkeerde segmenten hieronder moeten handmatig worden opgelost',
+  ];
+  for (const run of probleemRuns) {
+    waarschuwingen.push(
+      `Handmatig oplossen: ${markerLabel(run.marker)}` +
+        `${run.toelichting && run.marker === 'door_privaat' ? ` (${run.toelichting})` : ''} — ${run.lengteM} m`
+    );
+  }
+  if (ctx.panddekkingOnzeker) waarschuwingen.push(PANDDEKKING_WAARSCHUWING);
+
+  return {
+    id: 'best-effort',
+    label: 'Best-effort (handmatig oplossen)',
+    beschrijving:
+      'Geen schone wegroute mogelijk — delen door bebouwing/privaat zijn gemarkeerd',
+    traceLines,
+    coordinates,
+    segmenten,
+    totaleLengteM,
+    score,
+    waarschuwingen,
+    blokkades: [],
+    panddekkingOnzeker: ctx.panddekkingOnzeker,
+    markedSegments,
+    heeftHandmatigOpTeLossen: probleemRuns.length > 0,
+    zroOverzicht: computeZroOverzicht(traceLines, ctx),
   };
 }
 
@@ -991,19 +1383,20 @@ export function planAutomaticTrace(input: TraceRoutingInput): TraceRoutingResult
     alternatieven.push(route);
   }
 
+  // Geen schone wegroute? Niet stil falen: lever een best-effort tracé met
+  // expliciet gemarkeerde delen door bebouwing/privaat (handmatig oplossen).
   if (alternatieven.length === 0) {
-    const pandBlok =
-      ctx.pandPolygonen.length > 0
-        ? ' — tracé mag niet door bebouwing lopen'
-        : '';
-    return emptyRoutingResult({
-      waarschuwingen: [`Geen route langs wegen gevonden tussen de waypoints${pandBlok}`],
-      blokkades:
-        ctx.pandPolygonen.length > 0
-          ? ['Geen pad gevonden zonder door panden te lopen']
-          : ['Geen verbinding in wegennet'],
-      normReferenties: ctx.normReferenties,
-    });
+    const bestEffort = buildBestEffortRoute(graph, ctx, inputWithSnapped);
+    if (bestEffort) {
+      alternatieven.push(bestEffort);
+    } else {
+      return emptyRoutingResult({
+        waarschuwingen: ['Geen route langs wegen gevonden tussen de waypoints'],
+        blokkades: ['Geen verbinding in wegennet'],
+        normReferenties: ctx.normReferenties,
+        panddekkingOnzeker: ctx.panddekkingOnzeker,
+      });
+    }
   }
 
   const primary = alternatieven[0];
@@ -1018,6 +1411,14 @@ export function planAutomaticTrace(input: TraceRoutingInput): TraceRoutingResult
   const heeftPrivaat = primary.segmenten.some((s) => s.zakelijkRechtVereist);
   if (heeftHdd) samenvatting.push('Gestuurd boren (HDD) toegepast bij waterkruising >10 m');
   if (heeftPrivaat) samenvatting.push('Zakelijk recht vereist — voorkeur openbaar terrein niet overal haalbaar');
+  if (primary.heeftHandmatigOpTeLossen)
+    samenvatting.push('LET OP: best-effort tracé — segmenten door bebouwing/privaat handmatig oplossen');
+  if (ctx.panddekkingOnzeker) samenvatting.push(PANDDEKKING_WAARSCHUWING);
+  const zroAantal = primary.zroOverzicht?.percelen.length ?? 0;
+  if (zroAantal > 0)
+    samenvatting.push(
+      `ZRO-overzicht: ${zroAantal} particulier perceel/percelen doorkruist (${primary.zroOverzicht?.totaalPrivaatM ?? 0} m)`
+    );
 
   return {
     id: primary.id,
@@ -1033,6 +1434,10 @@ export function planAutomaticTrace(input: TraceRoutingInput): TraceRoutingResult
     normReferenties: ctx.normReferenties,
     alternatieven,
     geselecteerdeAlternativeId: primary.id,
+    panddekkingOnzeker: ctx.panddekkingOnzeker,
+    markedSegments: primary.markedSegments,
+    heeftHandmatigOpTeLossen: primary.heeftHandmatigOpTeLossen,
+    zroOverzicht: primary.zroOverzicht,
   };
 }
 

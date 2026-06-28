@@ -651,7 +651,17 @@ export type RouteCostProfile = 'default' | 'avoid_private' | 'prefer_main_roads'
 export interface AStarOptions {
   edgePenalty?: Map<string, number>;
   profile?: RouteCostProfile;
+  /**
+   * Best-effort modus: bebouwing blokkeert niet hard (Infinity) maar krijgt een
+   * enorme eindige straf. Zo blijft de router bebouwing maximaal mijden, maar
+   * kan hij een verbinding leggen waar het écht niet anders kan — de doorkruiste
+   * delen worden daarna gemarkeerd als 'handmatig oplossen'.
+   */
+  allowPandTraversal?: boolean;
 }
+
+/** Straf voor het doorkruisen van bebouwing in best-effort modus (zeer hoog, maar eindig). */
+const PAND_BEST_EFFORT_PENALTY = 1e6;
 
 /**
  * Geometrische eigenschappen van een edge t.o.v. de routing-context.
@@ -861,10 +871,15 @@ function edgeCostForIdx(
   const edge = graph.edges[edgeIdx];
   const geom = getEdgeGeometry(graph, edgeIdx, ctx);
 
-  // Harde eis: een tracé loopt nooit onder of vlak langs bebouwing
-  if (geom.pandBlocked) return Infinity;
-
+  // Harde eis: een tracé loopt nooit onder of vlak langs bebouwing.
+  // In best-effort modus blokkeert dit niet hard maar met een enorme straf,
+  // zodat een verbinding mogelijk blijft als er geen bebouwingsvrije route is.
   let cost = edge.lengthM;
+  if (geom.pandBlocked) {
+    if (!options?.allowPandTraversal) return Infinity;
+    cost *= PAND_BEST_EFFORT_PENALTY;
+  }
+
   if (geom.begroeidCount > 0) cost *= 2.5 ** geom.begroeidCount;
   // Boomafstand: kritieke zone sterk vermijden, wortelzone licht ontmoedigen
   if (geom.boomKritiek > 0) cost *= 6 ** Math.min(geom.boomKritiek, 3);
@@ -875,7 +890,9 @@ function edgeCostForIdx(
     const mult = options?.profile === 'avoid_private' ? 10 : 5;
     cost *= mult ** geom.privaatCount;
   }
-  if (geom.publiekCount > 0) cost *= 0.9;
+  // Voorkeur publieke grond; in best-effort modus iets sterker zodat ook het
+  // gemarkeerde tracé zo veel mogelijk over openbaar terrein blijft lopen
+  if (geom.publiekCount > 0) cost *= options?.allowPandTraversal ? 0.85 : 0.9;
   if (geom.privaatCount === 0) cost *= geom.korting;
   // Parallelafstand tot bestaande K&L (NEN 7171/netbeheerder): te dichtbij vermijden
   if (geom.teDichtOpNet) cost *= 2.5;

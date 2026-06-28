@@ -21,6 +21,8 @@ export interface DemoTrace {
   omschrijving: string;
   /** Handmatig geplaatste bematingen (lineair + hoek) — AutoCAD-stijl */
   bematingen?: Bemating[];
+  /** Metadata van de automatische routering (incl. ZRO-overzicht) — voor dossier-export */
+  autoRouting?: import('@/lib/services/trace-routing/persist').SavedRoutingMetadata;
 }
 
 /**

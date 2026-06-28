@@ -9,7 +9,23 @@ import { AfwegingsmatrixTabel } from '@/components/afwegingsmatrix-tabel';
 import { buildAfwegingsmatrix } from '@/lib/services/afwegingsmatrix';
 import { Check, GitBranch, Loader2, MapPin, Save, Scale, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import type { TraceRoutingResult, TraceRouteAlternative, TraceWaypoint } from '@/lib/services/trace-routing';
+import type { ZroPerceel } from '@/lib/services/trace-routing/types';
 import { cn } from '@/lib/utils';
+
+const ZRO_EIGENAAR_LABEL: Record<ZroPerceel['eigenaarType'], string> = {
+  particulier: 'Particulier',
+  bedrijf: 'Bedrijf',
+  gemeente: 'Gemeente',
+  overheid: 'Overheid',
+  onbekend: 'Onbekend',
+};
+
+const ZRO_STATUS_LABEL: Record<ZroPerceel['status'], string> = {
+  zakelijk_recht_vereist: 'Zakelijk recht',
+  gedoogplicht: 'Gedoogplicht',
+  publiek: 'Publiek',
+  eigenaar_onbekend: 'Onbekend',
+};
 
 interface AutoTracePanelProps {
   waypoints: TraceWaypoint[];
@@ -338,6 +354,30 @@ export function AutoTracePanel({
                 </div>
               )}
 
+              {activeAlt.heeftHandmatigOpTeLossen && (
+                <div className="rounded border border-red-400 bg-red-50 p-2 dark:border-red-800 dark:bg-red-950/30">
+                  <p className="font-medium text-red-700 dark:text-red-400">
+                    Handmatig oplossen — geen bebouwingsvrije route
+                  </p>
+                  <p className="mt-0.5 text-red-600 dark:text-red-300">
+                    Best-effort tracé: de onderstaande delen lopen door bebouwing of particulier
+                    terrein en moeten handmatig worden verlegd.
+                  </p>
+                  <ul className="mt-1 list-inside list-disc text-red-600 dark:text-red-300">
+                    {(activeAlt.markedSegments ?? [])
+                      .filter((m) => m.marker !== 'ok')
+                      .map((m, i) => (
+                        <li key={`${m.marker}-${i}`}>
+                          {m.marker === 'door_bebouwing'
+                            ? 'Loopt door bebouwing'
+                            : `Loopt door particulier perceel${m.toelichting ? ` (${m.toelichting})` : ''}`}{' '}
+                          — {m.lengteM} m
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <p className="font-medium text-foreground">Segmenten</p>
                 {activeAlt.segmenten.map((seg) => (
@@ -350,12 +390,65 @@ export function AutoTracePanel({
                       {seg.legtechniek.replace(/_/g, ' ')} · {seg.lengteM} m ·{' '}
                       {seg.leglocatie.replace(/_/g, ' ')}
                     </p>
+                    {seg.handmatigOplossen && seg.marker && seg.marker !== 'ok' && (
+                      <p className="font-medium text-red-600">
+                        {seg.marker === 'door_bebouwing'
+                          ? 'Handmatig oplossen — door bebouwing'
+                          : 'Handmatig oplossen — door particulier perceel'}
+                      </p>
+                    )}
                     {seg.zakelijkRechtVereist && (
                       <p className="text-amber-600">Zakelijk recht vereist</p>
                     )}
                   </div>
                 ))}
               </div>
+
+              {activeAlt.zroOverzicht && activeAlt.zroOverzicht.percelen.length > 0 && (
+                <div className="space-y-1.5 rounded border border-border p-2">
+                  <div className="flex items-center justify-between">
+                    <p className="flex items-center gap-1 font-medium text-foreground">
+                      <Scale className="h-3 w-3 text-amber-600" />
+                      ZRO-overzicht (zakelijk recht)
+                    </p>
+                    <SourceBadge source={activeAlt.zroOverzicht.bron === 'live' ? 'live' : 'demo'} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {activeAlt.zroOverzicht.percelen.length} particulier perceel/percelen ·{' '}
+                    {activeAlt.zroOverzicht.totaalPrivaatM} m privaat
+                  </p>
+                  <table className="w-full text-[10px]">
+                    <thead className="text-muted-foreground">
+                      <tr className="border-b border-border text-left">
+                        <th className="py-0.5 pr-1 font-medium">Perceel</th>
+                        <th className="py-0.5 pr-1 font-medium">Eigenaar</th>
+                        <th className="py-0.5 pr-1 text-right font-medium">m</th>
+                        <th className="py-0.5 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeAlt.zroOverzicht.percelen.map((p) => (
+                        <tr key={p.perceelnummer} className="border-b border-border/50 last:border-0">
+                          <td className="py-0.5 pr-1 font-mono">{p.perceelnummer}</td>
+                          <td className="py-0.5 pr-1">{ZRO_EIGENAAR_LABEL[p.eigenaarType]}</td>
+                          <td className="py-0.5 pr-1 text-right font-mono">{p.lengteDoorPerceelM}</td>
+                          <td className="py-0.5">
+                            <Badge variant="secondary" className="text-[9px]">
+                              {ZRO_STATUS_LABEL[p.status]}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {activeAlt.zroOverzicht.bron !== 'live' && (
+                    <p className="text-[9px] text-muted-foreground">
+                      Eigenaargegevens indicatief — verifiëren bij Kadaster (BRK Inzage) vóór
+                      vestiging zakelijk recht.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {result.normReferenties.length > 0 && (
                 <div>

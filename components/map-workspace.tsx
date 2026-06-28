@@ -51,6 +51,10 @@ interface MapWorkspaceProps {
     traceLines: [number, number, number][][];
     selected: boolean;
   }[];
+  markedSegments?: {
+    marker: 'ok' | 'door_bebouwing' | 'door_privaat';
+    coordinates: [number, number, number][];
+  }[];
   /** Netontwerp-assets op de kaart (stations/moffen/mantelbuizen) */
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   /** Bodem-vooronderzoek WBB-signalen (4326 GeoJSON) als laag op de kaart. */
@@ -158,6 +162,7 @@ export function MapWorkspace({
   onAutoWaypointsChange,
   onLayerDataChange,
   routeAlternatives = [],
+  markedSegments = [],
   netontwerpAssets,
   bodemSignalen,
   onAssetPlaats,
@@ -606,6 +611,7 @@ export function MapWorkspace({
           drawMode={drawMode}
           autoWaypoints={autoWaypoints}
           routeAlternatives={routeAlternatives}
+          markedSegments={markedSegments}
           onMapClick={handleTraceEdit}
           onTraceLinesChange={handleTraceLinesChange}
           cadOpties={cadOpties}

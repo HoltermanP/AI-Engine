@@ -299,7 +299,29 @@ describe('planAutomaticTrace — bebouwing wordt nooit doorsneden', () => {
     expect(res.totaleLengteM).toBeGreaterThan(650);
   });
 
-  it('geeft geen route wanneer bebouwing elke verbinding blokkeert', () => {
+  it('behoudt álle panden in de context — ook ver van het waypoint-midden (geen bbox-filter)', () => {
+    // Een pand 800 m noordelijk van de waypoints: viel vroeger buiten de
+    // waypoint-zoek-bbox en werd weggefilterd, waardoor een uitwijkende route
+    // er stilzwijgend doorheen kon. Nu blijft het pand in de context.
+    const verPand = rechthoek(OX + 240, OY + 800, OX + 260, OY + 820);
+    const ctx = buildRoutingContext(
+      makeInput(
+        [
+          { x: OX, y: OY },
+          { x: OX + 500, y: OY },
+        ],
+        [{ naam: 'Zuidstraat', type: 'G', coordinates: [[OX, OY], [OX + 500, OY]] }],
+        {
+          bgt: [
+            { type: 'pand', label: 'Ver pand', geometry: { type: 'Polygon', coordinates: [verPand] } },
+          ],
+        }
+      )
+    );
+    expect(ctx.pandPolygonen.length).toBe(1);
+  });
+
+  it('levert een best-effort tracé met gemarkeerde bebouwing wanneer elke verbinding geblokkeerd is', () => {
     // Alleen een rechte weg, volledig overdekt door een pand
     const res = planAutomaticTrace(
       makeInput(
@@ -319,8 +341,17 @@ describe('planAutomaticTrace — bebouwing wordt nooit doorsneden', () => {
         }
       )
     );
-    expect(res.alternatieven ?? []).toHaveLength(0);
-    expect(res.blokkades.join(' ')).toMatch(/pand|bebouwing/i);
+    // Niet stil falen: precies één best-effort alternatief, geen harde blokkade
+    expect(res.alternatieven).toHaveLength(1);
+    expect(res.alternatieven![0].id).toBe('best-effort');
+    expect(res.blokkades).toHaveLength(0);
+    // Expliciet gemarkeerd als handmatig op te lossen (door bebouwing)
+    expect(res.heeftHandmatigOpTeLossen).toBe(true);
+    const markers = (res.markedSegments ?? []).map((m) => m.marker);
+    expect(markers).toContain('door_bebouwing');
+    expect(markers.every((m) => m !== 'ok' || true)).toBe(true);
+    // De samenvatting waarschuwt de gebruiker
+    expect(res.alternatieven![0].waarschuwingen.join(' ')).toMatch(/handmatig/i);
   });
 });
 
@@ -475,5 +506,42 @@ describe('planAutomaticTrace — meerdere waypoints', () => {
       const gap = Math.hypot(coords[i][0] - coords[i - 1][0], coords[i][1] - coords[i - 1][1]);
       expect(gap).toBeLessThan(60);
     }
+  });
+});
+
+describe('planAutomaticTrace — onzekere panddekking wordt gesignaleerd', () => {
+  const roads: Road[] = [
+    { naam: 'Hoofdstraat', type: 'G', coordinates: [[OX, OY], [OX + 500, OY]] },
+  ];
+
+  it('zet de vlag en waarschuwt hard wanneer pandDekkingOnzeker is', () => {
+    const input = makeInput(
+      [
+        { x: OX, y: OY },
+        { x: OX + 500, y: OY },
+      ],
+      roads,
+      { pandDekkingOnzeker: true }
+    );
+    const ctx = buildRoutingContext(input);
+    expect(ctx.panddekkingOnzeker).toBe(true);
+
+    const res = planAutomaticTrace(input);
+    expect(res.panddekkingOnzeker).toBe(true);
+    expect(res.alternatieven![0].waarschuwingen.join(' ')).toMatch(/panddekking onzeker/i);
+  });
+
+  it('zet de vlag NIET bij volledige (zekere) panddekking', () => {
+    const res = planAutomaticTrace(
+      makeInput(
+        [
+          { x: OX, y: OY },
+          { x: OX + 500, y: OY },
+        ],
+        roads
+      )
+    );
+    expect(res.panddekkingOnzeker).toBe(false);
+    expect(res.alternatieven![0].waarschuwingen.join(' ')).not.toMatch(/panddekking onzeker/i);
   });
 });

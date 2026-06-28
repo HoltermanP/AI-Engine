@@ -14,7 +14,74 @@ import {
 } from '@/lib/services/trace-routing/fetch-routing-layers';
 import { saveTraceGeometry } from '@/lib/db/store';
 import { traceLengthM } from '@/lib/geo';
+import {
+  verrijkZroOverzicht,
+  type EigenaarInfo,
+} from '@/lib/services/trace-routing/zro';
+import type { ZroPerceel } from '@/lib/services/trace-routing/types';
 import type { TraceSegment } from '@/demo/roads';
+
+const EIGENAAR_TYPES: ZroPerceel['eigenaarType'][] = [
+  'particulier',
+  'bedrijf',
+  'gemeente',
+  'overheid',
+  'onbekend',
+];
+
+function normaliseerEigenaarType(raw: string): ZroPerceel['eigenaarType'] {
+  const v = raw.toLowerCase();
+  return EIGENAAR_TYPES.find((t) => t === v) ?? 'onbekend';
+}
+
+/**
+ * Verrijk het ZRO-overzicht (resultaat + alternatieven) met BRK-eigenaardata.
+ * De connector is demo-only zolang er geen BRK Inzage-credentials zijn; zonder
+ * match blijven percelen 'eigenaar_onbekend' (gracieuze degradatie).
+ */
+async function verrijkRoutingMetEigenaars(
+  result: TraceRoutingResult,
+  waypoints: TraceRoutingInput['waypoints']
+): Promise<TraceRoutingResult> {
+  const heeftZro =
+    (result.zroOverzicht?.percelen.length ?? 0) > 0 ||
+    result.alternatieven?.some((a) => (a.zroOverzicht?.percelen.length ?? 0) > 0);
+  if (!heeftZro) return result;
+
+  try {
+    const xs = waypoints.map((w) => w.x);
+    const ys = waypoints.map((w) => w.y);
+    const bbox = {
+      minX: Math.min(...xs),
+      minY: Math.min(...ys),
+      maxX: Math.max(...xs),
+      maxY: Math.max(...ys),
+    };
+    const { brkEigenaarConnector } = await import('@/lib/connectors/brk/eigenaar');
+    const res = await brkEigenaarConnector.fetch(bbox);
+    const bron = res._source === 'live' ? ('live' as const) : ('demo' as const);
+    const eigenaars: EigenaarInfo[] = res.percelen.map((p) => ({
+      perceelnummer: p.perceelnummer,
+      eigenaarType: normaliseerEigenaarType(p.eigenaarType),
+      zakelijkRecht: p.zakelijkRecht,
+    }));
+
+    const verrijk = (o?: TraceRoutingResult['zroOverzicht']) =>
+      o ? verrijkZroOverzicht(o, eigenaars, bron) : o;
+
+    return {
+      ...result,
+      zroOverzicht: verrijk(result.zroOverzicht),
+      alternatieven: result.alternatieven?.map((a) => ({
+        ...a,
+        zroOverzicht: verrijk(a.zroOverzicht),
+      })),
+    };
+  } catch {
+    // BRK tijdelijk onbereikbaar — overzicht blijft geometrisch (onbekend)
+    return result;
+  }
+}
 
 export async function planAutomaticTraceAction(
   input: TraceRoutingInput
@@ -25,7 +92,8 @@ export async function planAutomaticTraceAction(
     layerData: mergeRoutingLayerData(input.layerData, fetchedLayers),
   };
   const base = planAutomaticTrace(enriched);
-  return refineTraceWithAi(enriched, base);
+  const metEigenaars = await verrijkRoutingMetEigenaars(base, enriched.waypoints);
+  return refineTraceWithAi(enriched, metEigenaars);
 }
 
 export async function saveAutoTraceAction(

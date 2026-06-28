@@ -22,6 +22,7 @@ function baseCtx(overrides: Partial<RoutingContext> = {}): RoutingContext {
     bomen: [],
     referentieTraces: [],
     risicoZones: [],
+    panddekkingOnzeker: false,
     ...overrides,
   };
 }

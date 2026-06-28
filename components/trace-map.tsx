@@ -194,6 +194,8 @@ export interface MapLayerData {
     punten: { id: string; x: number; y: number }[];
     minAfstandTraceM?: number;
   }[];
+  /** Panddekking onzeker (PDOK-feature-caps geraakt) — bebouwingstoets mogelijk onvolledig */
+  pandDekkingOnzeker?: boolean;
 }
 
 interface TraceMapProps {
@@ -219,6 +221,11 @@ interface TraceMapProps {
     label: string;
     traceLines: [number, number, number][][];
     selected: boolean;
+  }[];
+  /** Gemarkeerde deeltracés van het geselecteerde alternatief (best-effort: door bebouwing/privaat) */
+  markedSegments?: {
+    marker: 'ok' | 'door_bebouwing' | 'door_privaat';
+    coordinates: [number, number, number][];
   }[];
   onMapClick?: (lng: number, lat: number, modifiers?: { alt: boolean }) => void;
   onTraceLinesChange?: (lines: TraceLines) => void;
@@ -715,6 +722,68 @@ function ensureRouteAlternativeLayers(
   }
 }
 
+/**
+ * Markeert deeltracés die door bebouwing of particulier terrein lopen
+ * (best-effort routering). Bebouwing = rood doorgetrokken, privaat = amber
+ * gestreept. 'ok'-delen worden niet apart getekend (de gewone tracélaag dekt ze).
+ */
+function ensureMarkedSegmentLayers(
+  map: MapLibreMap,
+  segments: {
+    marker: 'ok' | 'door_bebouwing' | 'door_privaat';
+    coordinates: [number, number, number][];
+  }[]
+): void {
+  const sourceId = 'marked-segments-source';
+  const bebouwingLayer = 'marked-segments-bebouwing';
+  const privaatLayer = 'marked-segments-privaat';
+
+  const features: GeoJSON.Feature[] = [];
+  for (const seg of segments) {
+    if (seg.marker === 'ok' || seg.coordinates.length < 2) continue;
+    features.push({
+      type: 'Feature',
+      properties: { marker: seg.marker },
+      geometry: lineForMap(seg.coordinates),
+    });
+  }
+
+  if (features.length === 0) {
+    for (const id of [bebouwingLayer, privaatLayer]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+    return;
+  }
+
+  const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features };
+  const source = map.getSource(sourceId) as GeoJsonSource | undefined;
+  if (source?.setData) {
+    source.setData(data);
+    return;
+  }
+  map.addSource(sourceId, { type: 'geojson', data });
+  map.addLayer({
+    id: bebouwingLayer,
+    type: 'line',
+    source: sourceId,
+    filter: ['==', ['get', 'marker'], 'door_bebouwing'],
+    paint: { 'line-color': '#DC2626', 'line-width': 5, 'line-opacity': 0.95 },
+  });
+  map.addLayer({
+    id: privaatLayer,
+    type: 'line',
+    source: sourceId,
+    filter: ['==', ['get', 'marker'], 'door_privaat'],
+    paint: {
+      'line-color': '#D97706',
+      'line-width': 5,
+      'line-opacity': 0.9,
+      'line-dasharray': [3, 2],
+    },
+  });
+}
+
 export function TraceMap({
   traces,
   bestaandNet = [],
@@ -732,6 +801,7 @@ export function TraceMap({
   drawMode = 'none',
   autoWaypoints = [],
   routeAlternatives = [],
+  markedSegments = [],
   onMapClick,
   onTraceLinesChange,
   onViewportChange,
@@ -1643,6 +1713,7 @@ export function TraceMap({
     });
 
     ensureRouteAlternativeLayers(map, routeAlternatives);
+    ensureMarkedSegmentLayers(map, markedSegments);
 
     if (tracePopupHandlerRef.current) {
       map.off('click', 'traces-line', tracePopupHandlerRef.current);
@@ -1684,6 +1755,7 @@ export function TraceMap({
     drawMode,
     autoWaypoints,
     routeAlternatives,
+    markedSegments,
     mapReady,
     isVisible,
     layerVisibility,

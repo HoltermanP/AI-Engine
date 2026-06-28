@@ -170,6 +170,15 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
     }));
   }, [routingResult, selectedAlternativeId]);
 
+  // Gemarkeerde delen (door bebouwing/privaat) van het geselecteerde alternatief
+  const markedSegments = useMemo(() => {
+    const alt = routingResult?.alternatieven?.find((a) => a.id === selectedAlternativeId);
+    return (alt?.markedSegments ?? []).map((m) => ({
+      marker: m.marker,
+      coordinates: m.coordinates,
+    }));
+  }, [routingResult, selectedAlternativeId]);
+
   // Publiceer de tekenconfig naar de gedeelde cockpit-kaart.
   const mapConfig = useMemo(
     () => ({
@@ -179,8 +188,9 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
       onAutoWaypointsChange: setAutoWaypoints,
       onLayerDataChange: setLayerDataSnapshot,
       routeAlternatives,
+      markedSegments,
     }),
-    [autoWaypoints, routeAlternatives]
+    [autoWaypoints, routeAlternatives, markedSegments]
   );
   useCockpitMap(mapConfig);
 

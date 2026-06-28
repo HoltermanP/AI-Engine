@@ -1,5 +1,11 @@
 import type { TraceSegment } from '@/demo/roads';
-import type { RouteSegmentAnalysis, TraceRouteAlternative, TraceRoutingResult } from './types';
+import type {
+  RouteSegmentAnalysis,
+  SegmentMarker,
+  TraceRouteAlternative,
+  TraceRoutingResult,
+  ZroOverzicht,
+} from './types';
 
 export function routingSegmentsToTraceSegmenten(
   segments: RouteSegmentAnalysis[]
@@ -52,6 +58,14 @@ export interface SavedRoutingMetadata {
   alternativeLabel: string;
   berekendOp: string;
   aiToelichting?: string;
+  /** Panddekking onzeker (PDOK-data afgekapt) bij berekening */
+  panddekkingOnzeker?: boolean;
+  /** Best-effort tracé met segmenten die handmatig opgelost moeten worden */
+  heeftHandmatigOpTeLossen?: boolean;
+  /** Compacte samenvatting van gemarkeerde delen (zonder geometrie) voor dossier */
+  markedSamenvatting?: { marker: SegmentMarker; lengteM: number; toelichting?: string }[];
+  /** Zakelijk-recht-overzicht over doorkruiste particuliere percelen */
+  zroOverzicht?: ZroOverzicht;
 }
 
 export function routingResultToSavedMetadata(
@@ -68,5 +82,11 @@ export function routingResultToSavedMetadata(
     alternativeLabel: alt?.label ?? result.label ?? 'Aanbevolen',
     berekendOp: new Date().toISOString(),
     aiToelichting: result.aiToelichting,
+    panddekkingOnzeker: alt?.panddekkingOnzeker ?? result.panddekkingOnzeker,
+    heeftHandmatigOpTeLossen: alt?.heeftHandmatigOpTeLossen ?? result.heeftHandmatigOpTeLossen,
+    markedSamenvatting: (alt?.markedSegments ?? result.markedSegments)
+      ?.filter((m) => m.marker !== 'ok')
+      .map((m) => ({ marker: m.marker, lengteM: m.lengteM, toelichting: m.toelichting })),
+    zroOverzicht: alt?.zroOverzicht ?? result.zroOverzicht,
   };
 }

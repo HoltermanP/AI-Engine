@@ -6,6 +6,7 @@ import type { TraceSegment } from '@/demo/roads';
 import type { Discipline } from './types';
 import type { CollectedTraceData } from '@/lib/services/collect-trace-data';
 import type { PersistedTraceToets } from '@/lib/services/trace-toets';
+import type { SavedRoutingMetadata } from '@/lib/services/trace-routing/persist';
 import { isCollectedDataCurrent } from '@/lib/services/normalize-collected';
 import { DEMO_TRACES } from '@/demo/traces';
 import { DEMO_BESTAAND_NET } from '@/demo/klic';
@@ -34,16 +35,7 @@ interface TraceMetadata {
   segmenten?: TraceSegment[];
   collectedData?: CollectedTraceData;
   userModified?: boolean;
-  autoRouting?: {
-    score: number;
-    totaleLengteM: number;
-    waarschuwingen: string[];
-    blokkades: string[];
-    alternativeId: string;
-    alternativeLabel: string;
-    berekendOp: string;
-    aiToelichting?: string;
-  };
+  autoRouting?: SavedRoutingMetadata;
   traceToets?: PersistedTraceToets;
 }
 
@@ -397,6 +389,7 @@ export async function saveTraceGeometry(
     segmenten: input.segmenten,
     wegnaam: input.wegnaam ?? existing.wegnaam,
     leglocatie: input.leglocatie ?? existing.leglocatie,
+    autoRouting: input.autoRouting ?? existing.autoRouting,
   };
 
   if (!databaseActief()) {

@@ -17,6 +17,7 @@ import {
 } from '@/lib/db/demo-store';
 import type { DemoTrace } from '@/demo/traces';
 import { genereerUitgangspuntennotitie } from '@/lib/dossier/uitgangspunten';
+import type { TraceRoutingResult } from '@/lib/services/trace-routing/types';
 import {
   genereerProefsleuvenPlan,
   type ProefsleufNetInput,
@@ -48,6 +49,33 @@ function getContext(traceId: string): WvbContext | null {
     projectNaam: project?.naam ?? 'Onbekend project',
     projectCode: project?.projectnummer ?? 'PROJ',
     opdrachtgever: project?.opdrachtgever,
+  };
+}
+
+/**
+ * Reconstrueert een minimale routing-result uit de opgeslagen autoRouting-metadata,
+ * zodat de uitgangspuntennotitie het ZRO-overzicht en de handmatig op te lossen
+ * segmenten kan opnemen. De geometrie van markeringen is niet bewaard (alleen een
+ * compacte samenvatting) — coördinaten blijven daarom leeg.
+ */
+function routingUitAutoRouting(trace: DemoTrace): TraceRoutingResult | undefined {
+  const ar = trace.autoRouting;
+  if (!ar) return undefined;
+  if (!ar.zroOverzicht && !ar.heeftHandmatigOpTeLossen) return undefined;
+  return {
+    traceLines: [],
+    coordinates: [],
+    segmenten: [],
+    totaleLengteM: ar.totaleLengteM,
+    score: ar.score,
+    samenvatting: [],
+    waarschuwingen: ar.waarschuwingen ?? [],
+    blokkades: ar.blokkades ?? [],
+    normReferenties: [],
+    panddekkingOnzeker: ar.panddekkingOnzeker,
+    heeftHandmatigOpTeLossen: ar.heeftHandmatigOpTeLossen,
+    markedSegments: (ar.markedSamenvatting ?? []).map((m) => ({ ...m, coordinates: [] })),
+    zroOverzicht: ar.zroOverzicht,
   };
 }
 
@@ -104,6 +132,7 @@ export async function genereerUitgangspuntenAction(
       netType: trace.netType,
       vereisteDekkingM: trace.vereisteDekking,
       diepteNapM: trace.coordinates[0]?.[2],
+      routing: routingUitAutoRouting(trace),
     });
     return { titel: notitie.titel, docCode: notitie.docCode, markdown: notitie.markdown };
   } catch (err) {

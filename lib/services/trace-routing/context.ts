@@ -189,9 +189,9 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
     const poly = polygonFromGeometry(feature.geometry);
     if (!poly) continue;
     if (feature.type === 'pand') {
-      if (searchBbox && !poly.some(([x, y]) => lineIntersectsBbox([[x, y]], searchBbox, 0))) {
-        continue;
-      }
+      // GEEN searchBbox-filter: de bebouwingsregel is hard en mag geen pand
+      // missen. Een route die buiten de smalle waypoint-bbox uitwijkt verloor
+      // anders zijn bescherming. Panden zijn al corridor-begrensd door de fetch.
       pandPolygonen.push(poly);
     } else if (
       feature.type.includes('begroeid') ||
@@ -355,5 +355,6 @@ export function buildRoutingContext(input: TraceRoutingInput): RoutingContext {
       .map((r) => r.coordinates)
       .filter((line) => !searchBbox || lineIntersectsBbox(line, searchBbox)),
     risicoZones,
+    panddekkingOnzeker: Boolean(layerData?.pandDekkingOnzeker),
   };
 }

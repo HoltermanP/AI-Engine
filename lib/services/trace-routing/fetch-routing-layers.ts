@@ -110,17 +110,26 @@ function splitTile(t: BboxQuery): BboxQuery[] {
   ];
 }
 
+/** Resultaat van een getegelde BGT-fetch met verzadigingssignaal. */
+interface TiledResult {
+  features: GeoJSON.Feature[];
+  /** True als de PDOK-cap geraakt is op het diepste splitsniveau — data is afgekapt. */
+  saturated: boolean;
+}
+
 /**
  * Eén tegel ophalen met verzadigingsdetectie: raakt het resultaat de cap,
  * dan is de data afgekapt (panden ontbreken!) en splitsen we de tegel in
- * kwadranten. Maximaal twee niveaus diep (16× de basiscapaciteit).
+ * kwadranten. Maximaal twee niveaus diep (16× de basiscapaciteit). Blijft de
+ * cap óók op het diepste niveau geraakt, dan markeren we `saturated` zodat de
+ * router weet dat de bebouwingstoets onvolledig kan zijn.
  */
 async function fetchCollectionTile(
   collection: string,
   tile: BboxQuery,
   perTile: number,
   depth = 0
-): Promise<GeoJSON.Feature[]> {
+): Promise<TiledResult> {
   const features = await fetchAllPdokOgcFeatures(
     '/lv/bgt/ogc/v1',
     collection,
@@ -129,34 +138,39 @@ async function fetchCollectionTile(
     perTile
   ).catch(() => [] as GeoJSON.Feature[]);
 
-  if (features.length >= perTile && depth < 2) {
+  const capGeraakt = features.length >= perTile;
+  if (capGeraakt && depth < 2) {
     const sub = await Promise.all(
       splitTile(tile).map((t) => fetchCollectionTile(collection, t, perTile, depth + 1))
     );
-    return sub.flat();
+    return {
+      features: sub.flatMap((s) => s.features),
+      saturated: sub.some((s) => s.saturated),
+    };
   }
-  return features;
+  // Op het diepste niveau nog steeds de cap raken = afgekapt
+  return { features, saturated: capGeraakt && depth >= 2 };
 }
 
 async function fetchBgtTiled(
   collection: string,
   tiles: BboxQuery[],
   perTile: number
-): Promise<GeoJSON.Feature[]> {
+): Promise<TiledResult> {
   const resultaten = await Promise.all(
     tiles.map((tile) => fetchCollectionTile(collection, tile, perTile))
   );
   const seen = new Set<string>();
   const features: GeoJSON.Feature[] = [];
-  for (const batch of resultaten) {
-    for (const f of batch) {
+  for (const r of resultaten) {
+    for (const f of r.features) {
       const key = bgtFeatureKey(f);
       if (seen.has(key)) continue;
       seen.add(key);
       features.push(f);
     }
   }
-  return features;
+  return { features, saturated: resultaten.some((r) => r.saturated) };
 }
 
 async function fetchNwbForRouting(bbox: BboxQuery) {
@@ -204,7 +218,9 @@ function mapBgtRoutingFeature(f: GeoJSON.Feature, defaultType: string): BgtFeatu
   };
 }
 
-async function fetchLiveBgtForRouting(tiles: BboxQuery[]): Promise<BgtFeature[]> {
+async function fetchLiveBgtForRouting(
+  tiles: BboxQuery[]
+): Promise<{ features: BgtFeature[]; panddekkingOnzeker: boolean }> {
   const [weg, water, pand, overigBouwwerk] = await Promise.all([
     fetchBgtTiled('wegdeel', tiles, WEGDEEL_PER_TILE),
     fetchBgtTiled('waterdeel', tiles, WATERDEEL_PER_TILE),
@@ -214,17 +230,21 @@ async function fetchLiveBgtForRouting(tiles: BboxQuery[]): Promise<BgtFeature[]>
   ]);
 
   const features = [
-    ...weg.map((f) => mapBgtRoutingFeature(f, 'weg')),
-    ...water.map((f) => mapBgtRoutingFeature(f, 'water')),
-    ...pand.map((f) => mapBgtRoutingFeature(f, 'pand')),
-    ...overigBouwwerk.map((f) => mapBgtRoutingFeature(f, 'pand')),
+    ...weg.features.map((f) => mapBgtRoutingFeature(f, 'weg')),
+    ...water.features.map((f) => mapBgtRoutingFeature(f, 'water')),
+    ...pand.features.map((f) => mapBgtRoutingFeature(f, 'pand')),
+    ...overigBouwwerk.features.map((f) => mapBgtRoutingFeature(f, 'pand')),
   ];
   const wegCount = features.filter((f) => f.type === 'weg').length;
   if (wegCount === 0) throw new Error('Geen BGT wegdelen in bbox');
-  return features;
+  // Alleen panden zijn relevant voor de bebouwingstoets
+  return { features, panddekkingOnzeker: pand.saturated || overigBouwwerk.saturated };
 }
 
-async function fetchBgtForRouting(bbox: BboxQuery, tiles: BboxQuery[]): Promise<BgtFeature[]> {
+async function fetchBgtForRouting(
+  bbox: BboxQuery,
+  tiles: BboxQuery[]
+): Promise<{ features: BgtFeature[]; panddekkingOnzeker: boolean }> {
   // Pand-polygonen zijn essentieel voor blokkade — altijd live PDOK proberen
   try {
     return await fetchLiveBgtForRouting(tiles);
@@ -233,7 +253,9 @@ async function fetchBgtForRouting(bbox: BboxQuery, tiles: BboxQuery[]): Promise<
   }
   const { pdokBgtConnector } = await import('@/lib/connectors/pdok/bgt');
   const result = await pdokBgtConnector.fetch(bbox);
-  return result.features;
+  // Demo-fallback: geen live panddekking — markeer als onzeker zodat de
+  // bebouwingsgarantie niet stilzwijgend op demo-data leunt
+  return { features: result.features, panddekkingOnzeker: true };
 }
 
 const PERCELEN_PER_TILE = 800;
@@ -310,7 +332,7 @@ async function fetchBomenForRouting(
 ): Promise<{ id: string; x: number; y: number }[]> {
   // Boomafstand is een ontwerpcriterium (groeiplaats/bomenverordening) — altijd live proberen
   try {
-    const punten = await fetchBgtTiled('vegetatieobject_punt', tiles, 1500);
+    const punten = (await fetchBgtTiled('vegetatieobject_punt', tiles, 1500)).features;
     const bomen = punten
       .filter((f) => f.geometry?.type === 'Point')
       .map((f) => {
@@ -344,7 +366,7 @@ export async function fetchBebouwingVoorLijn(
     fetchBgtTiled('overigbouwwerk', tiles, 600),
   ]);
   const polygonen: [number, number][][] = [];
-  for (const f of [...pand, ...overig]) {
+  for (const f of [...pand.features, ...overig.features]) {
     if (f.geometry?.type === 'Polygon') {
       polygonen.push(f.geometry.coordinates[0] as [number, number][]);
     } else if (f.geometry?.type === 'MultiPolygon') {
@@ -367,7 +389,7 @@ export async function fetchRoutingLayerData(
   const bbox = waypointsBbox(waypoints, ROUTING_PADDING_MIN_M);
   const tiles = corridorTiles(waypoints);
 
-  const [nwb, bgtFeatures, bomen, percelen, risico] = await Promise.all([
+  const [nwb, bgt, bomen, percelen, risico] = await Promise.all([
     fetchNwbForRouting(bbox),
     fetchBgtForRouting(bbox, tiles),
     fetchBomenForRouting(tiles, bbox),
@@ -375,6 +397,7 @@ export async function fetchRoutingLayerData(
     fetchRisicoLagenForRouting(bbox),
   ]);
 
+  const bgtFeatures = bgt.features;
   const hasLiveBgt = bgtFeatures.some((f) => f.type === 'pand');
   const bgtSource = hasLiveBgt ? ('live' as const) : ('demo' as const);
   const watergangen = watergangenFromBgt(bbox, bgtFeatures, bgtSource);
@@ -393,6 +416,7 @@ export async function fetchRoutingLayerData(
     percelen,
     natura2000: risico.natura2000,
     vervuildeGrond: risico.vervuildeGrond,
+    pandDekkingOnzeker: bgt.panddekkingOnzeker,
   };
 }
 
@@ -434,5 +458,8 @@ export function mergeRoutingLayerData(
       : client.percelen,
     belemmeringen: client.belemmeringen,
     bomen: (fetched.bomen?.length ? fetched.bomen : client.bomen) ?? [],
+    // Onzeker zodra een van beide bronnen onzeker is — de garantie mag niet
+    // stilzwijgend wegvallen omdat de client toevallig wat panden meestuurde
+    pandDekkingOnzeker: Boolean(fetched.pandDekkingOnzeker || client.pandDekkingOnzeker),
   };
 }

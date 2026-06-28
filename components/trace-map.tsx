@@ -236,6 +236,17 @@ interface TraceMapProps {
     lengteM: number;
     oppervlakteM2?: number;
   }[];
+  /** Sleufloze kruisingen (boring/HDD, persing) — afwijkende kleur + tekstlabel op het tracé */
+  boringen?: {
+    ref: string;
+    techniek: 'hdd' | 'persing';
+    label: string;
+    kruist: string;
+    lengteM: number;
+    x: number;
+    y: number;
+    coordinates: [number, number][];
+  }[];
   onMapClick?: (lng: number, lat: number, modifiers?: { alt: boolean }) => void;
   onTraceLinesChange?: (lines: TraceLines) => void;
   /** CAD-tekenopties: objectsnap (F3) en ortho-modus (F8) */
@@ -877,6 +888,92 @@ function ensureZroPercelenLayers(
   });
 }
 
+/**
+ * Tekent sleufloze kruisingen (gestuurde boring/HDD, persing) als afwijkend
+ * gekleurde lijnstukken op het tracé, met een tekstlabel (referentie + type +
+ * lengte) bij elke boring/persing.
+ */
+function ensureBoringLayers(
+  map: MapLibreMap,
+  boringen: {
+    ref: string;
+    techniek: 'hdd' | 'persing';
+    label: string;
+    kruist: string;
+    lengteM: number;
+    x: number;
+    y: number;
+    coordinates: [number, number][];
+  }[]
+): void {
+  const sourceId = 'boringen-source';
+  const labelSourceId = 'boringen-label-source';
+  const lineLayer = 'boringen-line';
+  const labelLayer = 'boringen-label';
+
+  const lineFeatures: GeoJSON.Feature[] = boringen
+    .filter((b) => b.coordinates.length >= 2)
+    .map((b) => ({
+      type: 'Feature',
+      properties: { ref: b.ref, techniek: b.techniek, kruist: b.kruist, lengteM: b.lengteM },
+      geometry: lineForMap(b.coordinates),
+    }));
+
+  const labelFeatures: GeoJSON.Feature[] = boringen.map((b) => ({
+    type: 'Feature',
+    properties: {
+      tekst: `${b.ref} · ${b.techniek === 'hdd' ? 'boring' : 'persing'} ${b.lengteM} m`,
+    },
+    geometry: pointToMapGeoJson(b.x, b.y),
+  }));
+
+  if (lineFeatures.length === 0) {
+    for (const id of [labelLayer, lineLayer]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    for (const id of [labelSourceId, sourceId]) {
+      if (map.getSource(id)) map.removeSource(id);
+    }
+    return;
+  }
+
+  const lineData: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: lineFeatures };
+  const labelData: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: labelFeatures };
+  const lineSrc = map.getSource(sourceId) as GeoJsonSource | undefined;
+  const labelSrc = map.getSource(labelSourceId) as GeoJsonSource | undefined;
+  if (lineSrc?.setData && labelSrc?.setData) {
+    lineSrc.setData(lineData);
+    labelSrc.setData(labelData);
+    return;
+  }
+
+  map.addSource(sourceId, { type: 'geojson', data: lineData });
+  map.addSource(labelSourceId, { type: 'geojson', data: labelData });
+  map.addLayer({
+    id: lineLayer,
+    type: 'line',
+    source: sourceId,
+    layout: { 'line-cap': 'round' },
+    paint: { 'line-color': '#DB2777', 'line-width': 6, 'line-opacity': 0.95 },
+  });
+  map.addLayer({
+    id: labelLayer,
+    type: 'symbol',
+    source: labelSourceId,
+    layout: {
+      'text-field': ['get', 'tekst'],
+      'text-size': 11,
+      'text-offset': [0, -1.1],
+      'text-anchor': 'bottom',
+    },
+    paint: {
+      'text-color': '#9D174D',
+      'text-halo-color': '#ffffff',
+      'text-halo-width': 1.8,
+    },
+  });
+}
+
 export function TraceMap({
   traces,
   bestaandNet = [],
@@ -896,6 +993,7 @@ export function TraceMap({
   routeAlternatives = [],
   markedSegments = [],
   zroPercelen = [],
+  boringen = [],
   onMapClick,
   onTraceLinesChange,
   onViewportChange,
@@ -1810,6 +1908,7 @@ export function TraceMap({
     ensureRouteAlternativeLayers(map, routeAlternatives);
     ensureMarkedSegmentLayers(map, markedSegments);
     ensureZroPercelenLayers(map, zroPercelen);
+    ensureBoringLayers(map, boringen);
 
     if (zroPopupHandlerRef.current) {
       map.off('click', 'zro-percelen-fill', zroPopupHandlerRef.current);
@@ -1884,6 +1983,7 @@ export function TraceMap({
     routeAlternatives,
     markedSegments,
     zroPercelen,
+    boringen,
     mapReady,
     isVisible,
     layerVisibility,

@@ -919,8 +919,10 @@ function edgeCostForIdx(
   }
 
   // NWB-centerlines zijn schone hartlijnen; uit BGT-vlakken afgeleide lijnen zijn
-  // ruwer — lichte opslag voorkomt zigzaggen tussen parallelle lijnvarianten
-  if (edge.roadId.startsWith('bgt-')) cost *= 1.15;
+  // ruwe diagonalen tussen vlak-hoekpunten. Stevige opslag zodat het tracé de
+  // schone NWB-hartlijn volgt en de BGT-diagonalen alleen als laatste redmiddel
+  // gebruikt (anders zigzag tussen parallelle lijnvarianten).
+  if (edge.roadId.startsWith('bgt-')) cost *= 1.8;
 
   const penalty = options?.edgePenalty?.get(edgeKey(edge.from, edge.to));
   if (penalty) cost *= penalty;

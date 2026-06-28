@@ -64,6 +64,17 @@ interface MapWorkspaceProps {
     lengteM: number;
     oppervlakteM2?: number;
   }[];
+  /** Sleufloze kruisingen (boring/HDD, persing) — apart gekleurd + gelabeld */
+  boringen?: {
+    ref: string;
+    techniek: 'hdd' | 'persing';
+    label: string;
+    kruist: string;
+    lengteM: number;
+    x: number;
+    y: number;
+    coordinates: [number, number][];
+  }[];
   /** Netontwerp-assets op de kaart (stations/moffen/mantelbuizen) */
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   /** Bodem-vooronderzoek WBB-signalen (4326 GeoJSON) als laag op de kaart. */
@@ -173,6 +184,7 @@ export function MapWorkspace({
   routeAlternatives = [],
   markedSegments = [],
   zroPercelen = [],
+  boringen = [],
   netontwerpAssets,
   bodemSignalen,
   onAssetPlaats,
@@ -623,6 +635,7 @@ export function MapWorkspace({
           routeAlternatives={routeAlternatives}
           markedSegments={markedSegments}
           zroPercelen={zroPercelen}
+          boringen={boringen}
           onMapClick={handleTraceEdit}
           onTraceLinesChange={handleTraceLinesChange}
           cadOpties={cadOpties}

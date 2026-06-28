@@ -50,6 +50,17 @@ export interface CockpitMapConfig {
     lengteM: number;
     oppervlakteM2?: number;
   }[];
+  /** Sleufloze kruisingen (boring/HDD, persing) — apart gekleurd + gelabeld op de tekening */
+  boringen?: {
+    ref: string;
+    techniek: 'hdd' | 'persing';
+    label: string;
+    kruist: string;
+    lengteM: number;
+    x: number;
+    y: number;
+    coordinates: [number, number][];
+  }[];
   netontwerpAssets?: { punten: GeoJSON.Feature[]; lijnen: GeoJSON.Feature[] };
   onAssetPlaats?: (x: number, y: number) => void;
   onAssetClick?: (assetId: string) => void;

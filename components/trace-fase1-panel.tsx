@@ -9,9 +9,11 @@ import { traceLengthM } from '@/lib/geo';
 import { applyTraceLines, demoTraceToMapTrace, normalizeTraceCoordinates } from '@/lib/trace-edit';
 import { planAutomaticTraceAction, saveAutoTraceAction, saveManualTraceAction } from '@/lib/actions/trace-routing';
 import {
+  routingSegmentsToTraceSegmenten,
   type TraceRoutingResult,
   type TraceWaypoint,
 } from '@/lib/services/trace-routing';
+import { bepaalBoringen, type Boring } from '@/lib/services/trace-routing/boringen';
 import type { DemoTrace } from '@/demo/traces';
 import type { MapLayerData } from '@/components/trace-map';
 import { getTraceLines } from '@/lib/trace-edit';
@@ -191,6 +193,40 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
     }));
   }, [routingResult, selectedAlternativeId]);
 
+  // Sleufloze kruisingen (boring/persing) — hergebruikt het bestaande boringmodel
+  // (zelfde berekening als de tekening-export), afgeleid van het actieve alternatief.
+  const boringObjecten = useMemo<Boring[]>(() => {
+    const alt = routingResult?.alternatieven?.find((a) => a.id === selectedAlternativeId);
+    const segmentenSrc = alt?.segmenten ?? routingResult?.segmenten;
+    const traceLines = alt?.traceLines ?? routingResult?.traceLines;
+    const coordinates = alt?.coordinates ?? routingResult?.coordinates;
+    if (!segmentenSrc?.length || !traceLines?.length || !coordinates?.length) return [];
+    const pseudo = {
+      projectId: trace.projectId,
+      vereisteDekking: trace.vereisteDekking,
+      coordinates,
+      traceLines,
+      segmenten: routingSegmentsToTraceSegmenten(segmentenSrc),
+    } as DemoTrace;
+    return bepaalBoringen(pseudo);
+  }, [routingResult, selectedAlternativeId, trace.projectId, trace.vereisteDekking]);
+
+  // Kaartvorm: gekleurd lijnstuk (intrede→uittrede) + labelpositie per boring
+  const boringen = useMemo(
+    () =>
+      boringObjecten.map((b) => ({
+        ref: b.id,
+        techniek: (b.methode === 'persing' ? 'persing' : 'hdd') as 'hdd' | 'persing',
+        label: b.methodeLabel,
+        kruist: b.naam,
+        lengteM: b.lengteM,
+        x: b.x,
+        y: b.y,
+        coordinates: [b.intrede, b.uittrede] as [number, number][],
+      })),
+    [boringObjecten]
+  );
+
   // ZRO-percelen (zakelijk recht) van het geselecteerde alternatief — markering op de tekening
   const zroPercelen = useMemo(() => {
     const alt = routingResult?.alternatieven?.find((a) => a.id === selectedAlternativeId);
@@ -218,8 +254,9 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
       routeAlternatives,
       markedSegments,
       zroPercelen,
+      boringen,
     }),
-    [autoWaypoints, routeAlternatives, markedSegments, zroPercelen]
+    [autoWaypoints, routeAlternatives, markedSegments, zroPercelen, boringen]
   );
   useCockpitMap(mapConfig);
 
@@ -256,6 +293,7 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
         onPlanTrace={handlePlanTrace}
         isPlanning={isPlanning}
         result={routingResult}
+        boringen={boringObjecten}
         selectedAlternativeId={selectedAlternativeId}
         onSelectAlternative={handleSelectAlternative}
         onSaveTrace={handleSaveTrace}

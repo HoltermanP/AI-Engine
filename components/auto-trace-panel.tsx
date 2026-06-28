@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { SourceBadge } from '@/components/source-badge';
 import { AfwegingsmatrixTabel } from '@/components/afwegingsmatrix-tabel';
 import { buildAfwegingsmatrix } from '@/lib/services/afwegingsmatrix';
-import { Check, GitBranch, Loader2, MapPin, Save, Scale, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { Check, Drill, GitBranch, Loader2, MapPin, Save, Scale, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import type { TraceRoutingResult, TraceRouteAlternative, TraceWaypoint } from '@/lib/services/trace-routing';
 import type { ZroPerceel } from '@/lib/services/trace-routing/types';
+import type { Boring } from '@/lib/services/trace-routing/boringen';
 import { cn } from '@/lib/utils';
 
 export const ZRO_EIGENAAR_LABEL: Record<ZroPerceel['eigenaarType'], string> = {
@@ -34,6 +35,8 @@ interface AutoTracePanelProps {
   onPlanTrace: () => void;
   isPlanning: boolean;
   result: TraceRoutingResult | null;
+  /** Sleufloze kruisingen (boring/persing) van het actieve alternatief */
+  boringen?: Boring[];
   selectedAlternativeId: string | null;
   onSelectAlternative: (id: string) => void;
   onSaveTrace: () => void;
@@ -96,6 +99,7 @@ export function AutoTracePanel({
   onPlanTrace,
   isPlanning,
   result,
+  boringen = [],
   selectedAlternativeId,
   onSelectAlternative,
   onSaveTrace,
@@ -451,6 +455,43 @@ export function AutoTracePanel({
                       vestiging zakelijk recht.
                     </p>
                   )}
+                </div>
+              )}
+
+              {boringen.length > 0 && (
+                <div className="space-y-1.5 rounded border border-border p-2">
+                  <p className="flex items-center gap-1 font-medium text-foreground">
+                    <Drill className="h-3 w-3" style={{ color: '#DB2777' }} />
+                    Boringen &amp; persingen
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {boringen.length} sleufloze kruising(en) ·{' '}
+                    {boringen.reduce((s, b) => s + b.lengteM, 0)} m totaal
+                  </p>
+                  <table className="w-full text-[10px]">
+                    <thead className="text-muted-foreground">
+                      <tr className="border-b border-border text-left">
+                        <th className="py-0.5 pr-1 font-medium">Ref</th>
+                        <th className="py-0.5 pr-1 font-medium">Type</th>
+                        <th className="py-0.5 pr-1 font-medium">Kruist</th>
+                        <th className="py-0.5 pr-1 text-right font-medium">Lengte m</th>
+                        <th className="py-0.5 text-right font-medium">Ø mm</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {boringen.map((b) => (
+                        <tr key={b.id} className="border-b border-border/50 last:border-0">
+                          <td className="py-0.5 pr-1 font-mono font-medium" style={{ color: '#DB2777' }}>
+                            {b.id}
+                          </td>
+                          <td className="py-0.5 pr-1">{b.methodeLabel}</td>
+                          <td className="py-0.5 pr-1">{b.naam}</td>
+                          <td className="py-0.5 pr-1 text-right font-mono">{b.lengteM}</td>
+                          <td className="py-0.5 text-right font-mono">{b.diameterMm}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
 

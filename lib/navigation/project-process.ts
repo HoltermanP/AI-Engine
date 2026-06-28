@@ -31,6 +31,12 @@ export interface ProjectProcessStep {
   beschrijving: string;
   icon: LucideIcon;
   href: (projectId: string, traceId?: string) => string;
+  /**
+   * Schermindeling van de stap:
+   * - 'kaart': kaart-centrisch (tekenen/assets) — kaart groot, paneel smal.
+   * - 'breed': inhoud-/output-centrisch (calculatie, dossier) — paneel groot, kaart secundair.
+   */
+  layout: 'kaart' | 'breed';
 }
 
 function stapHref(projectId: string, stap: ProjectProcessStepId, traceId?: string): string {
@@ -48,6 +54,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Projectoverzicht, tracés en voortgang',
     icon: FolderKanban,
     href: (p) => stapHref(p, 'intake'),
+    layout: 'breed',
   },
   {
     id: 'trace',
@@ -57,6 +64,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Tracé op de GIS-kaart tekenen en routeren',
     icon: GitBranch,
     href: (p, t) => stapHref(p, 'trace', t),
+    layout: 'kaart',
   },
   {
     id: 'bodem',
@@ -66,6 +74,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Bodemvooronderzoek en omgevingssignalen (NEN 5725)',
     icon: Mountain,
     href: (p) => stapHref(p, 'bodem'),
+    layout: 'kaart',
   },
   {
     id: 'netontwerp',
@@ -75,6 +84,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Belastingen, kabelkeuze, stations en assets',
     icon: Network,
     href: (p) => stapHref(p, 'netontwerp'),
+    layout: 'kaart',
   },
   {
     id: 'engineering',
@@ -84,6 +94,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Conflictdetectie, berekeningen, tekeningen en bemating',
     icon: Wrench,
     href: (p) => stapHref(p, 'engineering'),
+    layout: 'breed',
   },
   {
     id: 'planning',
@@ -93,6 +104,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Activiteiten, milestones en Gantt-overzicht',
     icon: CalendarDays,
     href: (p) => stapHref(p, 'planning'),
+    layout: 'breed',
   },
   {
     id: 'dossier',
@@ -102,6 +114,7 @@ export const PROJECT_PROCESS_STEPS: ProjectProcessStep[] = [
     beschrijving: 'Documenten, tekeningen, rapporten en startbesluit',
     icon: FolderOpen,
     href: (p) => stapHref(p, 'dossier'),
+    layout: 'breed',
   },
 ];
 

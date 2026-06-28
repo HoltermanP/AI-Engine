@@ -849,12 +849,110 @@ function routesAreSimilar(a: TraceRouteAlternative, b: TraceRouteAlternative): b
   );
 }
 
+/** Dichtstbijzijnde punt op een polyline t.o.v. (px,py). */
+function projecteerPuntOpLijn(
+  line: [number, number][],
+  px: number,
+  py: number
+): { i: number; pt: [number, number]; d: number } {
+  let best: { i: number; pt: [number, number]; d: number } = { i: 1, pt: line[0], d: Infinity };
+  for (let i = 1; i < line.length; i++) {
+    const [x1, y1] = line[i - 1];
+    const [x2, y2] = line[i];
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const l = dx * dx + dy * dy;
+    const t = l === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l));
+    const qx = x1 + t * dx;
+    const qy = y1 + t * dy;
+    const d = Math.hypot(px - qx, py - qy);
+    if (d < best.d) best = { i, pt: [qx, qy], d };
+  }
+  return best;
+}
+
+function dedupeOpeenvolgend(line: [number, number][]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const p of line) {
+    const last = out[out.length - 1];
+    if (!last || dist(last, p) > 0.05) out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Hecht het werkelijke waypoint aan het tracé-uiteinde zodat het tracé begint/
+ * eindigt waar de gebruiker klikte (i.p.v. op de gesnapte wegknoop, die tot
+ * tientallen meters kan afwijken en zelfs een terugloop veroorzaakt). De
+ * "terugloop" vóór/na het dichtstbijzijnde routepunt wordt getrimd. Alleen
+ * uitgevoerd als de verbindende stub bebouwingsvrij is.
+ */
+function lijnRaaktPand(line: [number, number][], panden: [number, number][][]): boolean {
+  for (let i = 1; i < line.length; i++) {
+    if (segmentRaaktPand(line[i - 1], line[i], panden)) return true;
+  }
+  return false;
+}
+
+function hechtWaypointAanUiteinde(
+  line: [number, number][],
+  wp: [number, number],
+  panden: [number, number][][],
+  kant: 'start' | 'eind'
+): [number, number][] {
+  if (line.length < 2) return line;
+  const uiteinde = kant === 'start' ? line[0] : line[line.length - 1];
+  if (dist(uiteinde, wp) < 1) return line; // al op het waypoint
+  const proj = projecteerPuntOpLijn(line, wp[0], wp[1]);
+
+  // Verbindingsstub van het waypoint naar het dichtstbijzijnde routepunt; loopt
+  // hij door bebouwing, dan eromheen leiden. Lukt dat niet bebouwingsvrij, dan
+  // de gesnapte ligging behouden (liever overshoot dan door een pand).
+  const stub =
+    kant === 'start'
+      ? omleidPanden([wp, proj.pt], panden)
+      : omleidPanden([proj.pt, wp], panden);
+  if (lijnRaaktPand(stub, panden)) return line;
+
+  const out: [number, number][] =
+    kant === 'start'
+      ? [...stub, ...line.slice(proj.i)]
+      : [...line.slice(0, proj.i), ...stub];
+  return dedupeOpeenvolgend(out);
+}
+
+/** Hecht start/eind-waypoints aan de eerste/laatste lijn van een 3D-tracé. */
+function hechtUiteindenAan(
+  traceLines: [number, number, number][][],
+  rawStart: [number, number] | undefined,
+  rawEnd: [number, number] | undefined,
+  ctx: RoutingContext
+): [number, number, number][][] {
+  if (traceLines.length === 0) return traceLines;
+  const result = traceLines.map((l) => l.slice());
+  const naar3d = (l2d: [number, number][]): [number, number, number][] =>
+    l2d.map(([x, y]) => [x, y, ctx.diepteNap]);
+
+  if (rawStart) {
+    const eerste = result[0].map(([x, y]) => [x, y] as [number, number]);
+    result[0] = naar3d(hechtWaypointAanUiteinde(eerste, rawStart, ctx.pandPolygonen, 'start'));
+  }
+  if (rawEnd) {
+    const idx = result.length - 1;
+    const laatste = result[idx].map(([x, y]) => [x, y] as [number, number]);
+    result[idx] = naar3d(hechtWaypointAanUiteinde(laatste, rawEnd, ctx.pandPolygonen, 'eind'));
+  }
+  return result;
+}
+
 function buildSingleRoute(
   graph: RoadGraph,
   ctx: RoutingContext,
   input: TraceRoutingInput,
   spec: (typeof ALTERNATIVE_PROFILES)[number],
-  edgePenalty: Map<string, number>
+  edgePenalty: Map<string, number>,
+  rawStart?: [number, number],
+  rawEnd?: [number, number]
 ): TraceRouteAlternative | null {
   const { waypoints } = input;
   const astarOptions: AStarOptions = {
@@ -912,6 +1010,12 @@ function buildSingleRoute(
   }
 
   if (!traceLines.some((line) => line.length >= 2)) return null;
+
+  // Tracé laten beginnen/eindigen op het werkelijke waypoint (geen gesnapte
+  // wegknoop-overshoot of terugloop) — mits de aansluitstub bebouwingsvrij is.
+  const verbondenLines = hechtUiteindenAan(traceLines, rawStart, rawEnd, ctx);
+  traceLines.length = 0;
+  traceLines.push(...verbondenLines);
 
   // Eindgeometrie-hervalidatie: de daadwerkelijk opgeslagen lijnen (na gladde
   // route, offset én densificatie) mogen nooit door bebouwing lopen. De strikte
@@ -1239,7 +1343,9 @@ function routeBestEffortSegment(
 function buildBestEffortRoute(
   graph: RoadGraph,
   ctx: RoutingContext,
-  input: TraceRoutingInput
+  input: TraceRoutingInput,
+  rawStart?: [number, number],
+  rawEnd?: [number, number]
 ): TraceRouteAlternative | null {
   const { waypoints } = input;
   const astarOptions: AStarOptions = { profile: 'avoid_private', allowPandTraversal: true };
@@ -1281,6 +1387,11 @@ function buildBestEffortRoute(
   // een nette "geen route"-melding tonen i.p.v. een kale rechte lijn.
   if (wegBereikt === 0) return null;
   if (!traceLines.some((line) => line.length >= 2)) return null;
+
+  // Tracé op het werkelijke waypoint laten beginnen/eindigen (geen overshoot)
+  const verbonden = hechtUiteindenAan(traceLines, rawStart, rawEnd, ctx);
+  traceLines.length = 0;
+  traceLines.push(...verbonden);
 
   const coordinates = traceLines.flat();
   const totaleLengteM = Math.round(traceLengthM(coordinates, traceLines));
@@ -1364,6 +1475,14 @@ export function planAutomaticTrace(input: TraceRoutingInput): TraceRoutingResult
   const waypoints = snapWaypointsToGraph(graph, rawWaypoints);
   const inputWithSnapped = { ...input, waypoints };
 
+  // Werkelijke (ongesnapte) uiteinden zodat het tracé begint/eindigt waar de
+  // gebruiker klikte i.p.v. op een gesnapte wegknoop tientallen meters verderop.
+  const rawStart: [number, number] = [rawWaypoints[0].x, rawWaypoints[0].y];
+  const rawEnd: [number, number] = [
+    rawWaypoints[rawWaypoints.length - 1].x,
+    rawWaypoints[rawWaypoints.length - 1].y,
+  ];
+
   if (graph.nodes.length === 0) {
     return emptyRoutingResult({
       waarschuwingen: ['Geen wegennet beschikbaar in dit gebied'],
@@ -1377,7 +1496,7 @@ export function planAutomaticTrace(input: TraceRoutingInput): TraceRoutingResult
 
   for (const spec of ALTERNATIVE_PROFILES) {
     if (alternatieven.length >= MAX_ALTERNATIVES) break;
-    const route = buildSingleRoute(graph, ctx, inputWithSnapped, spec, edgePenalty);
+    const route = buildSingleRoute(graph, ctx, inputWithSnapped, spec, edgePenalty, rawStart, rawEnd);
     if (!route) continue;
     if (alternatieven.some((existing) => routesAreSimilar(existing, route))) continue;
     alternatieven.push(route);
@@ -1386,7 +1505,7 @@ export function planAutomaticTrace(input: TraceRoutingInput): TraceRoutingResult
   // Geen schone wegroute? Niet stil falen: lever een best-effort tracé met
   // expliciet gemarkeerde delen door bebouwing/privaat (handmatig oplossen).
   if (alternatieven.length === 0) {
-    const bestEffort = buildBestEffortRoute(graph, ctx, inputWithSnapped);
+    const bestEffort = buildBestEffortRoute(graph, ctx, inputWithSnapped, rawStart, rawEnd);
     if (bestEffort) {
       alternatieven.push(bestEffort);
     } else {

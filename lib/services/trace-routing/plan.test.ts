@@ -299,6 +299,22 @@ describe('planAutomaticTrace — bebouwing wordt nooit doorsneden', () => {
     expect(res.totaleLengteM).toBeGreaterThan(650);
   });
 
+  it('laat het tracé op het werkelijke waypoint beginnen/eindigen (geen snap-overshoot)', () => {
+    // Waypoints liggen ~8 m naast de weg in open gebied; het tracé moet er via
+    // een korte stub naartoe lopen i.p.v. op de gesnapte wegknoop te stoppen.
+    const roads: Road[] = [
+      { naam: 'Hoofdstraat', type: 'G', coordinates: [[OX, OY], [OX + 500, OY]] },
+    ];
+    const startWp = { x: OX + 20, y: OY + 8 };
+    const eindWp = { x: OX + 480, y: OY + 8 };
+    const res = planAutomaticTrace(makeInput([startWp, eindWp], roads));
+    const coords = res.coordinates;
+    const eerste = coords[0];
+    const laatste = coords[coords.length - 1];
+    expect(Math.hypot(eerste[0] - startWp.x, eerste[1] - startWp.y)).toBeLessThan(1);
+    expect(Math.hypot(laatste[0] - eindWp.x, laatste[1] - eindWp.y)).toBeLessThan(1);
+  });
+
   it('behoudt álle panden in de context — ook ver van het waypoint-midden (geen bbox-filter)', () => {
     // Een pand 800 m noordelijk van de waypoints: viel vroeger buiten de
     // waypoint-zoek-bbox en werd weggefilterd, waardoor een uitwijkende route

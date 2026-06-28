@@ -71,6 +71,8 @@ interface CockpitContextValue {
   toetsStatus: TraceToetsStatus;
   setToetsStatus: (s: TraceToetsStatus) => void;
   autosaveMelding: string | null;
+  /** Schrijf een openstaande wijziging direct weg (bij een vervolgactie/stapwissel). */
+  flushPendingSaves: () => Promise<void>;
   // Per-stap kaart-config (gepubliceerd via useCockpitMap)
   mapConfig: CockpitMapConfig;
   setMapConfig: (config: CockpitMapConfig) => void;
@@ -114,8 +116,39 @@ export function CockpitProvider({
   const [mapConfig, setMapConfig] = useState<CockpitMapConfig>(DEFAULT_MAP_CONFIG);
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Nog niet weggeschreven save (laatste wijziging) — direct flushbaar bij een
+  // vervolgactie (stapwissel) zodat er nooit iets verloren gaat.
+  const pendingSaveRef = useRef<null | (() => Promise<void>)>(null);
   const selectedRef = useRef(selectedTraceId);
   selectedRef.current = selectedTraceId;
+
+  const voerTraceSaveUit = useCallback(async (id: string, active: MapTrace) => {
+    const lines = (active.traceLines ?? [active.coordinates]).filter((l) => l.length >= 2);
+    const result = await saveManualTraceAction(
+      id,
+      normalizeTraceCoordinates(active.coordinates),
+      lines.map((l) => normalizeTraceCoordinates(l))
+    );
+    setAutosaveMelding(
+      result.ok ? 'Tracéwijziging opgeslagen' : `Opslaan mislukt: ${result.error}`
+    );
+    setTimeout(() => setAutosaveMelding(null), 4000);
+  }, []);
+
+  /**
+   * Schrijf een eventueel openstaande wijziging direct weg (annuleert de
+   * debounce). Aan te roepen bij elke vervolgactie, zoals een stapwissel —
+   * "altijd opslaan bij een volgende actie".
+   */
+  const flushPendingSaves = useCallback(async () => {
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+    const fn = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (fn) await fn();
+  }, []);
 
   /**
    * Gedeelde tracé-mutatie met debounce-autosave: zodra de geometrie van het
@@ -147,27 +180,25 @@ export function CockpitProvider({
 
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
       setAutosaveMelding('Wijziging wordt opgeslagen…');
-      autosaveTimer.current = setTimeout(async () => {
-        const lines = (nextActive.traceLines ?? [nextActive.coordinates]).filter(
-          (l) => l.length >= 2
-        );
-        const result = await saveManualTraceAction(
-          id,
-          normalizeTraceCoordinates(nextActive.coordinates),
-          lines.map((l) => normalizeTraceCoordinates(l))
-        );
-        setAutosaveMelding(
-          result.ok ? 'Tracéwijziging opgeslagen' : `Opslaan mislukt: ${result.error}`
-        );
-        setTimeout(() => setAutosaveMelding(null), 4000);
+      // Bewaar de save zodat een vervolgactie hem desnoods direct kan flushen
+      pendingSaveRef.current = () => voerTraceSaveUit(id, nextActive);
+      autosaveTimer.current = setTimeout(() => {
+        const fn = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        autosaveTimer.current = null;
+        void fn?.();
       }, 1200);
     },
-    []
+    [voerTraceSaveUit]
   );
 
   useEffect(
     () => () => {
+      // Bij unmount nog snel een openstaande wijziging wegschrijven
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      const fn = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      void fn?.();
     },
     []
   );
@@ -190,6 +221,7 @@ export function CockpitProvider({
       toetsStatus,
       setToetsStatus,
       autosaveMelding,
+      flushPendingSaves,
       mapConfig,
       setMapConfig,
     }),
@@ -205,6 +237,7 @@ export function CockpitProvider({
       selectedConflictId,
       toetsStatus,
       autosaveMelding,
+      flushPendingSaves,
       mapConfig,
     ]
   );

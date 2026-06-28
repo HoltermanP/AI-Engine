@@ -43,6 +43,17 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
   const start = coords[0];
   const end = coords[coords.length - 1];
 
+  // Persisteer de volledige berekende route (geometrie + routing-metadata/ZRO)
+  // automatisch — "altijd opslaan bij een vervolgactie", zonder handmatige knop.
+  const autoSaveRoute = useCallback(
+    (result: TraceRoutingResult, alternativeId: string) => {
+      void saveAutoTraceAction(trace.id, result, alternativeId).catch(() => {
+        /* stil falen: de geometrie is al via de cockpit-autosave bewaard */
+      });
+    },
+    [trace.id]
+  );
+
   const applyAlternativeToMap = useCallback(
     (result: TraceRoutingResult, alternativeId: string) => {
       const alt = result.alternatieven?.find((a) => a.id === alternativeId);
@@ -50,8 +61,9 @@ export function TraceFase1Panel({ trace, anthropicConfigured = false }: TraceFas
       setTraces((prev) =>
         prev.map((t) => (t.id === trace.id ? applyTraceLines(t, alt.traceLines) : t))
       );
+      autoSaveRoute(result, alternativeId);
     },
-    [setTraces, trace.id]
+    [setTraces, trace.id, autoSaveRoute]
   );
 
   const handlePlanTrace = useCallback(async () => {

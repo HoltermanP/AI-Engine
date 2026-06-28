@@ -254,6 +254,7 @@ export function ProjectCockpit({
       initialCollected={initialCollected}
       initialConflicten={initialConflicten}
     >
+      <AutosaveBijStapwissel />
       <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden">
         {/* Kopbalk: projectnaam, stap, tracé-selector, walker en kaart-toggle */}
         <div className="flex min-w-0 items-center gap-3 border-b border-border bg-card px-4 py-2">
@@ -351,4 +352,23 @@ export function ProjectCockpit({
       </div>
     </CockpitProvider>
   );
+}
+
+/**
+ * Schrijft bij élke vervolgactie (wissel van hoofdstap of netontwerp-substap)
+ * een openstaande wijziging direct weg. Centraal en navigatie-onafhankelijk:
+ * werkt voor de Vorige/Volgende-knoppen, de step-rail én de substap-navigatie.
+ */
+function AutosaveBijStapwissel() {
+  const { flushPendingSaves } = useCockpit();
+  const searchParams = useSearchParams();
+  const sleutel = `${searchParams.get('stap') ?? ''}:${searchParams.get('substap') ?? ''}`;
+  const vorige = useRef(sleutel);
+  useEffect(() => {
+    if (vorige.current !== sleutel) {
+      vorige.current = sleutel;
+      void flushPendingSaves();
+    }
+  }, [sleutel, flushPendingSaves]);
+  return null;
 }

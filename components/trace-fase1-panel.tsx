@@ -9,10 +9,10 @@ import { traceLengthM } from '@/lib/geo';
 import { applyTraceLines, demoTraceToMapTrace, normalizeTraceCoordinates } from '@/lib/trace-edit';
 import { planAutomaticTraceAction, saveAutoTraceAction, saveManualTraceAction } from '@/lib/actions/trace-routing';
 import {
-  routingSegmentsToTraceSegmenten,
   type TraceRoutingResult,
   type TraceWaypoint,
 } from '@/lib/services/trace-routing';
+import { routingSegmentsToTraceSegmenten } from '@/lib/services/trace-routing/persist';
 import { bepaalBoringen, type Boring } from '@/lib/services/trace-routing/boringen';
 import type { DemoTrace } from '@/demo/traces';
 import type { MapLayerData } from '@/components/trace-map';
